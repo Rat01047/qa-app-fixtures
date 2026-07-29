@@ -1,0 +1,78 @@
+# Logging is configured per environment, and the file name is derived from
+# `%kernel.environment%` — so the same config writes var/log/dev.log under
+# APP_ENV=dev and var/log/prod.log under APP_ENV=prod. Anything that reads a
+# Symfony application log has to resolve that name at runtime rather than
+# assuming "prod.log", which is the behaviour this branch exists to test.
+#
+# One important default is preserved below: upstream's recipe sends prod logs to
+# `php://stderr` and writes **no file at all**. On a stock Symfony app an empty
+# or missing var/log/prod.log is therefore correct, not a fault — the lines went
+# to the web server's error log. This branch keeps that stderr handler *and*
+# adds a file handler beside it, so both shapes are observable at once.
+
+monolog:
+    channels:
+        - deprecation # Deprecations are logged in the dedicated "deprecation" channel when it exists
+
+when@dev:
+    monolog:
+        handlers:
+            main:
+                type: stream
+                path: "%kernel.logs_dir%/%kernel.environment%.log"
+                level: debug
+                channels: ["!event"]
+            console:
+                type: console
+                process_psr_3_messages: false
+                channels: ["!event", "!doctrine", "!console"]
+
+when@test:
+    monolog:
+        handlers:
+            main:
+                type: fingers_crossed
+                action_level: error
+                handler: nested
+                excluded_http_codes: [404, 405]
+                channels: ["!event"]
+            nested:
+                type: stream
+                path: "%kernel.logs_dir%/%kernel.environment%.log"
+                level: debug
+
+when@prod:
+    monolog:
+        handlers:
+            # Added for this fixture, and NOT part of upstream's recipe. Without
+            # it prod produces no log file, so a log viewer has nothing to show
+            # and cannot be tested at all. Level `info` so ordinary requests
+            # appear, rather than only errors.
+            file:
+                type: stream
+                path: "%kernel.logs_dir%/%kernel.environment%.log"
+                level: info
+                channels: ["!event", "!deprecation"]
+
+            # Everything below is upstream's default, kept verbatim.
+            main:
+                type: fingers_crossed
+                action_level: error
+                handler: nested
+                excluded_http_codes: [404, 405]
+                channels: ["!deprecation"]
+                buffer_size: 50 # How many messages should be saved? Prevent memory leaks
+            nested:
+                type: stream
+                path: php://stderr
+                level: debug
+                formatter: monolog.formatter.json
+            console:
+                type: console
+                process_psr_3_messages: false
+                channels: ["!event", "!doctrine"]
+            deprecation:
+                type: stream
+                channels: [deprecation]
+                path: php://stderr
+                formatter: monolog.formatter.json

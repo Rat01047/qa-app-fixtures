@@ -1,0 +1,14 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Symfony QA Site — built assets{% endblock %}
+
+{% block body %}
+    <h1>Symfony QA Site</h1>
+    <p id="marker">ENCORE_ASSETS_RENDERED — Symfony</p>
+    <p>Symfony: <code>{{ symfony }}</code> · PHP: <code>{{ php }}</code> ·
+       Marker: <code>{{ marker }}</code></p>
+    <p>This page only renders once <code>npm run build</code> has produced
+       <code>public/build/entrypoints.json</code>, so reaching it proves the
+       Node build step ran on the server.</p>
+    <p><a href="/">Back</a> · <a href="/health">/health</a></p>
+{% endblock %}
