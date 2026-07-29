@@ -1,0 +1,17 @@
+{
+  "name": "qa-fixtures/php-app",
+  "description": "Plain PHP acceptance site for QA fixtures (PHP)",
+  "type": "project",
+  "license": "MIT",
+  "require": {
+    "php": ">=7.4"
+  },
+  "autoload": {
+    "psr-4": {
+      "App\\": "src/"
+    }
+  },
+  "config": {
+    "optimize-autoloader": true
+  }
+}

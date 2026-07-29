@@ -1,0 +1,10 @@
+/vendor/
+/node_modules/
+.env
+*.log
+
+# Written by `npm run build`. Never commit build output: the deploy pulls with
+# `git pull`, which would conflict with regenerated files on every redeploy.
+/public/assets/
+HANDOFF.md
+.DS_Store

@@ -1,0 +1,9 @@
+{
+    "name": "php-app-fixture",
+    "private": true,
+    "type": "module",
+    "description": "Exercises the deploy tool's Node build step for a non-Laravel PHP site. No dependencies on purpose.",
+    "scripts": {
+        "build": "node build.mjs"
+    }
+}
