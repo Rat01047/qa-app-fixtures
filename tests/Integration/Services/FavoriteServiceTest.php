@@ -1,0 +1,150 @@
+<?php
+
+namespace Tests\Integration\Services;
+
+use App\Events\MultipleSongsLiked;
+use App\Events\MultipleSongsUnliked;
+use App\Events\SongFavoriteToggled;
+use App\Models\Album;
+use App\Models\Contracts\Favoriteable;
+use App\Models\Favorite;
+use App\Models\Song;
+use App\Services\FavoriteService;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Event;
+use PHPUnit\Framework\Attributes\Test;
+use Tests\TestCase;
+
+use function Tests\create_user;
+
+class FavoriteServiceTest extends TestCase
+{
+    private FavoriteService $service;
+
+    public function setUp(): void
+    {
+        parent::setUp();
+
+        $this->service = app(FavoriteService::class);
+    }
+
+    #[Test]
+    public function toggleFavoriteToTrue(): void
+    {
+        Event::fake(SongFavoriteToggled::class);
+
+        $user = create_user();
+        $song = Song::factory()->createOne();
+
+        $this->service->toggleFavorite($song, $user);
+
+        $this->assertDatabaseHas(Favorite::class, [
+            'user_id' => $user->id,
+            'favoriteable_type' => 'playable',
+            'favoriteable_id' => $song->id,
+        ]);
+
+        Event::assertDispatched(SongFavoriteToggled::class);
+    }
+
+    #[Test]
+    public function toggleFavoriteAssignsIncrementingPosition(): void
+    {
+        Event::fake(SongFavoriteToggled::class);
+
+        $user = create_user();
+        $songs = Song::factory()->createMany(3);
+
+        $this->service->toggleFavorite($songs[0], $user);
+        $this->service->toggleFavorite($songs[1], $user);
+        $this->service->toggleFavorite($songs[2], $user);
+
+        $positions = Favorite::query()->where('user_id', $user->id)->orderBy('position')->pluck('position')->toArray();
+
+        self::assertSame([0, 1, 2], $positions);
+    }
+
+    #[Test]
+    public function toggleFavoriteToFalse(): void
+    {
+        Event::fake(SongFavoriteToggled::class);
+
+        $user = create_user();
+        $favorite = Favorite::factory()->for($user)->createOne();
+
+        $this->service->toggleFavorite($favorite->favoriteable, $user);
+        $this->assertDatabaseMissing(Favorite::class, ['id' => $favorite->id]);
+
+        Event::assertDispatched(SongFavoriteToggled::class);
+    }
+
+    #[Test]
+    public function toggleFavoriteAlbum(): void
+    {
+        Event::fake(SongFavoriteToggled::class);
+
+        $user = create_user();
+        $album = Album::factory()->createOne();
+
+        $this->service->toggleFavorite($album, $user);
+
+        $this->assertDatabaseHas(Favorite::class, [
+            'user_id' => $user->id,
+            'favoriteable_type' => 'album',
+            'favoriteable_id' => $album->id,
+        ]);
+
+        Event::assertNotDispatched(SongFavoriteToggled::class);
+    }
+
+    #[Test]
+    public function batchFavorite(): void
+    {
+        Event::fake(MultipleSongsLiked::class);
+
+        /** @var Collection<int, Song> $songs */
+        $songs = Song::factory()->createMany(2);
+        $user = create_user();
+
+        $this->service->batchFavorite($songs, $user); // @phpstan-ignore-line
+
+        foreach ($songs as $song) {
+            $this->assertDatabaseHas(Favorite::class, [
+                'user_id' => $user->id,
+                'favoriteable_type' => 'playable',
+                'favoriteable_id' => $song->id,
+            ]);
+        }
+
+        Event::assertDispatched(MultipleSongsLiked::class, static function (MultipleSongsLiked $event) use ($user) {
+            return $event->songs->count() === 2 && $event->user->is($user);
+        });
+    }
+
+    #[Test]
+    public function batchUndoFavorite(): void
+    {
+        Event::fake(MultipleSongsUnliked::class);
+
+        $user = create_user();
+
+        /** @var Collection<int, Favorite> $favorites */
+        $favorites = Favorite::factory()->for($user)->count(2)->create();
+
+        $this->service->batchUndoFavorite($favorites->map(static function (Favorite $favorite): Favoriteable&Model {
+            $entity = $favorite->favoriteable;
+            self::assertInstanceOf(Model::class, $entity);
+
+            return $entity;
+        }), $user);
+
+        foreach ($favorites as $favorite) {
+            $this->assertDatabaseMissing(Favorite::class, ['id' => $favorite->id]);
+        }
+
+        Event::assertDispatched(MultipleSongsUnliked::class, static function (MultipleSongsUnliked $event) use ($user) {
+            return $event->songs->count() === 2 && $event->user->is($user);
+        });
+    }
+}

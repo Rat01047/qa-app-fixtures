@@ -1,0 +1,161 @@
+<template>
+  <ScreenBase>
+    <template #header>
+      <ScreenHeader :disabled="loading">
+        Media Browser
+
+        <template #meta>
+          <div class="flex items-center gap-2 mt-2">
+            <Breadcrumbs :current="currentFolder" :ancestors class="flex-1" />
+            <Btn size="small" variant="ghost" title="Reload" @click.prevent="refresh">
+              <Icon :icon="faRotateRight" />
+            </Btn>
+          </div>
+        </template>
+      </ScreenHeader>
+    </template>
+
+    <ScreenEmptyState v-if="libraryEmpty">
+      No files found.
+      <span v-if="currentUserCan.manageSettings()" class="secondary block"> Have you set up your library yet? </span>
+    </ScreenEmptyState>
+
+    <div v-else class="-m-6 h-full min-h-full flex flex-col flex-1 overflow-auto">
+      <MediaListView
+        v-show="!shouldShowSkeleton"
+        :items
+        :folder-id="folderId"
+        :class="noContent || 'flex-1'"
+        @scrolled-to-end="onScrolledToEnd"
+      />
+
+      <MediaListViewSkeleton v-if="shouldShowSkeleton" role="status" aria-busy="true" aria-label="Loading" />
+
+      <ScreenEmptyState v-if="noContent">
+        <template #icon>
+          <Icon :icon="faFolderOpen" class="text-k-fg" />
+        </template>
+        This folder is empty.
+      </ScreenEmptyState>
+    </div>
+  </ScreenBase>
+</template>
+
+<script lang="ts" setup>
+import { faRotateRight } from '@fortawesome/free-solid-svg-icons'
+import { faFolderOpen } from '@fortawesome/free-regular-svg-icons'
+import { computed, ref } from 'vue'
+import { commonStore } from '@/stores/commonStore'
+import { useRouter } from '@/composables/useRouter'
+import { mediaBrowser } from '@/services/mediaBrowser'
+import { useErrorHandler } from '@/composables/useErrorHandler'
+import { eventBus } from '@/utils/eventBus'
+import { usePolicies } from '@/composables/usePolicies'
+
+import ScreenHeader from '@/components/ui/ScreenHeader.vue'
+import ScreenEmptyState from '@/components/ui/ScreenEmptyState.vue'
+import ScreenBase from '@/components/screens/ScreenBase.vue'
+import Breadcrumbs from '@/components/playable/media-browser/Breadcrumbs.vue'
+import MediaListView from '@/components/playable/media-browser/MediaListView.vue'
+import MediaListViewSkeleton from '@/components/playable/media-browser/MediaListViewSkeleton.vue'
+import Btn from '@/components/ui/form/Btn.vue'
+
+const { currentUserCan } = usePolicies()
+const { onRouteChanged, getRouteParam, onScreenActivated } = useRouter()
+
+const libraryEmpty = computed(() => commonStore.state.song_length === 0)
+
+const loading = ref(false)
+const folderId = ref<string | null>(null)
+const currentFolder = ref<Folder | null>(null)
+const ancestors = ref<Folder[]>([])
+
+const getFolderIdFromRoute = () => getRouteParam('folder') || null
+
+const subfolders = ref<Folder[]>([])
+const songs = ref<Song[]>([])
+const cursor = ref<string | null>('')
+
+const parentEntry = computed(() => mediaBrowser.getParentReference(currentFolder.value))
+const noContent = computed(() => !loading.value && !subfolders.value.length && !songs.value.length)
+
+const shouldShowSkeleton = computed(() => {
+  return loading.value && cursor.value === ''
+})
+
+const items = computed(() => {
+  const merged = [...subfolders.value, ...songs.value]
+
+  if (parentEntry.value) {
+    merged.unshift(parentEntry.value)
+  }
+
+  return merged
+})
+
+const resetState = () => {
+  subfolders.value = []
+  songs.value = []
+  currentFolder.value = null
+  ancestors.value = []
+  cursor.value = ''
+}
+
+const fetchContent = async (forceRefresh = false) => {
+  if (loading.value || cursor.value === null) {
+    return
+  }
+
+  try {
+    loading.value = true
+    const fetched = await mediaBrowser.browse(folderId.value, cursor.value, forceRefresh)
+    currentFolder.value = fetched.current
+    ancestors.value = fetched.ancestors
+    subfolders.value = fetched.subfolders
+    songs.value = [...songs.value, ...fetched.songs]
+    cursor.value = fetched.nextCursor
+  } catch (e) {
+    useErrorHandler().handleHttpError(e)
+  } finally {
+    loading.value = false
+  }
+}
+
+const refresh = () => {
+  resetState()
+  fetchContent(true)
+}
+
+const onScrolledToEnd = () => {
+  if (cursor.value !== null) {
+    fetchContent()
+  }
+}
+
+onRouteChanged(async route => {
+  if (route.screen !== 'MediaBrowser') {
+    return
+  }
+
+  folderId.value = getFolderIdFromRoute()
+  resetState()
+  await fetchContent()
+})
+
+eventBus.on('SONGS_DELETED', async deletedSongs => {
+  const deletedIds = new Set(deletedSongs.map(s => s.id))
+  songs.value = songs.value.filter(s => !deletedIds.has(s.id))
+
+  if (!songs.value.length) {
+    resetState()
+    await fetchContent()
+  }
+})
+
+onScreenActivated('MediaBrowser', async () => {
+  folderId.value = getFolderIdFromRoute()
+  await fetchContent()
+})
+</script>
+
+<style lang="postcss" scoped></style>

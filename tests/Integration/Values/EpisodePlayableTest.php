@@ -1,0 +1,96 @@
+<?php
+
+namespace Tests\Integration\Values;
+
+use App\Exceptions\UnsafeUrlException;
+use App\Models\Song;
+use App\Services\Network\SafeHttp;
+use App\Values\Podcast\EpisodePlayable;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\Test;
+use Tests\TestCase;
+
+class EpisodePlayableTest extends TestCase
+{
+    private SafeHttp $safeHttp;
+
+    public function setUp(): void
+    {
+        parent::setUp();
+
+        $this->safeHttp = app(SafeHttp::class);
+    }
+
+    #[Test]
+    public function createAndRetrieved(): void
+    {
+        Http::fake([
+            'https://example.com/episode.mp3' => Http::response('foo'),
+        ]);
+        $episode = Song::factory()
+            ->asEpisode()
+            ->createOne([
+                'path' => 'https://example.com/episode.mp3',
+            ]);
+
+        $playable = EpisodePlayable::getForEpisode($episode, $this->safeHttp);
+
+        Http::assertSentCount(1);
+        self::assertSame('acbd18db4cc2f85cedef654fccc4a4d8', $playable->checksum);
+
+        self::assertTrue(Cache::has("episode-playable.{$episode->id}"));
+
+        $retrieved = EpisodePlayable::getForEpisode($episode, $this->safeHttp);
+
+        // No extra HTTP request should be made.
+        Http::assertSentCount(1);
+        self::assertSame($playable, $retrieved);
+        self::assertTrue($retrieved->valid());
+
+        file_put_contents($playable->path, 'bar');
+        self::assertFalse($retrieved->valid());
+    }
+
+    #[Test]
+    public function refusesToFetchUnsafeUrl(): void
+    {
+        Http::fake();
+
+        $episode = Song::factory()
+            ->asEpisode()
+            ->createOne([
+                'path' => 'http://169.254.169.254/latest/meta-data/iam/security-credentials/',
+            ]);
+
+        self::expectException(UnsafeUrlException::class);
+
+        try {
+            EpisodePlayable::getForEpisode($episode, $this->safeHttp);
+        } finally {
+            Http::assertNothingSent();
+        }
+    }
+
+    #[Test]
+    public function refusesToFollowRedirectToUnsafeUrl(): void
+    {
+        Http::fake([
+            'https://public.example.com/episode.mp3' => Http::response('', 302, [
+                'Location' => 'http://169.254.169.254/latest/meta-data/iam/security-credentials/',
+            ]),
+            'http://169.254.169.254/*' => Http::response('credentials-should-not-be-fetched'),
+        ]);
+
+        $episode = Song::factory()->asEpisode()->createOne(['path' => 'https://public.example.com/episode.mp3']);
+
+        self::expectException(UnsafeUrlException::class);
+
+        try {
+            EpisodePlayable::getForEpisode($episode, $this->safeHttp);
+        } finally {
+            // The redirect target must never be requested.
+            Http::assertNotSent(static fn ($request) => str_contains($request->url(), '169.254.169.254'));
+        }
+    }
+}

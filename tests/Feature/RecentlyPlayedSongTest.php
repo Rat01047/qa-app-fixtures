@@ -1,0 +1,23 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Http\Resources\SongResource;
+use App\Models\Interaction;
+use PHPUnit\Framework\Attributes\Test;
+use Tests\TestCase;
+
+use function Tests\create_user;
+
+class RecentlyPlayedSongTest extends TestCase
+{
+    #[Test]
+    public function index(): void
+    {
+        $user = create_user();
+
+        Interaction::factory()->for($user)->createMany(5);
+
+        $this->getAs('api/songs/recently-played', $user)->assertJsonStructure([0 => SongResource::JSON_STRUCTURE]);
+    }
+}

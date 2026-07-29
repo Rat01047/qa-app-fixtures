@@ -1,0 +1,144 @@
+<?php
+
+namespace App\Models;
+
+use App\Builders\AlbumBuilder;
+use App\Models\Concerns\Albums\HasAlbumAttributes;
+use App\Models\Concerns\MorphsToEmbeds;
+use App\Models\Concerns\MorphsToFavorites;
+use App\Models\Concerns\MorphsToRatings;
+use App\Models\Concerns\SupportsDeleteWhereValueNotIn;
+use App\Models\Contracts\Embeddable;
+use App\Models\Contracts\Favoriteable;
+use App\Models\Contracts\Rateable;
+use App\Observers\AlbumObserver;
+use Carbon\Carbon;
+use Database\Factories\AlbumFactory;
+use Illuminate\Database\Eloquent\Attributes\Appends;
+use Illuminate\Database\Eloquent\Attributes\Guarded;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Laravel\Scout\Searchable;
+use OwenIt\Auditing\Auditable;
+use OwenIt\Auditing\Contracts\Auditable as AuditableContract;
+
+/**
+ * @property ?boolean $favorite Whether the album is liked by the scoped user
+ * @property ?Carbon $favorited_at When the scoped user favorited the album, if at all
+ * @property ?Carbon $last_played_at When the scoped user last played the album, if at all
+ * @property ?int $year
+ * @property ?string $thumbnail The album's thumbnail file name
+ * @property Artist $artist The album's artist
+ * @property Carbon $created_at
+ * @property Collection<array-key, Song> $songs
+ * @property User $user
+ * @property bool $is_unknown If the album is the Unknown Album
+ * @property int $user_id
+ * @property string $artist_id
+ * @property string $artist_name
+ * @property string $cover The album cover's file name
+ * @property string $id
+ * @property string $name Name of the album
+ *
+ * @method static AlbumFactory factory(...$parameters)
+ */
+#[ObservedBy(AlbumObserver::class)]
+#[UseEloquentBuilder(AlbumBuilder::class)]
+#[Guarded(['id'])]
+#[Hidden(['updated_at'])]
+#[Appends(['is_compilation'])]
+class Album extends Model implements AuditableContract, Embeddable, Favoriteable, Rateable
+{
+    use Auditable;
+    use HasAlbumAttributes;
+    use HasFactory;
+    use HasUlids;
+    use MorphsToEmbeds;
+    use MorphsToFavorites;
+    use MorphsToRatings;
+    use Searchable;
+    use SupportsDeleteWhereValueNotIn;
+
+    public const string UNKNOWN_NAME = 'Unknown Album';
+
+    protected $with = ['artist'];
+
+    /** @deprecated */
+    /** @inheritDoc */
+    protected function casts(): array
+    {
+        return [
+            'favorite' => 'boolean',
+            'favorited_at' => 'datetime',
+            'last_played_at' => 'datetime',
+        ];
+    }
+
+    public static function query(): AlbumBuilder
+    {
+        /** @var AlbumBuilder */
+        return parent::query()->addSelect('albums.*');
+    }
+
+    /**
+     * Get an album using some provided information.
+     * If such is not found, a new album will be created using the information.
+     */
+    public static function getOrCreate(Artist $artist, ?string $name = null): static
+    {
+        return static::query() // @phpstan-ignore-line
+            ->firstOrCreate([
+                'artist_id' => $artist->id,
+                'artist_name' => $artist->name,
+                'user_id' => $artist->user_id,
+                'name' => trim($name) ?: self::UNKNOWN_NAME,
+            ]);
+    }
+
+    public function artist(): BelongsTo
+    {
+        return $this->belongsTo(Artist::class);
+    }
+
+    public function songs(): HasMany
+    {
+        return $this->hasMany(Song::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function belongsToUser(User $user): bool
+    {
+        return $this->user_id === $user->id;
+    }
+
+    /** @inheritdoc */
+    public function toSearchableArray(): array
+    {
+        $array = [
+            'id' => $this->id,
+            'user_id' => $this->user_id,
+            'name' => $this->name,
+        ];
+
+        if (
+            $this->artist_name
+            && $this->artist_name !== Artist::UNKNOWN_NAME
+            && $this->artist_name !== Artist::VARIOUS_NAME
+        ) {
+            $array['artist'] = $this->artist_name;
+        }
+
+        return $array;
+    }
+}

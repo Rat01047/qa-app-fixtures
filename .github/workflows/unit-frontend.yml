@@ -1,0 +1,45 @@
+name: Frontend Unit Tests
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - resources/assets/**
+      - package.json
+      - .github/workflows/unit-frontend.yml
+  push:
+    branches:
+      - master
+      - next
+    paths:
+      - resources/assets/**
+      - package.json
+      - .github/workflows/unit-frontend.yml
+  workflow_dispatch:
+
+env:
+  LARAVEL_BYPASS_ENV_CHECK: 1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [ 22 ]
+        shard: [ 1/3, 2/3, 3/3 ]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run unit tests
+        run: pnpm exec vp test --run --shard=${{ matrix.shard }}
+      - name: Collect coverage
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

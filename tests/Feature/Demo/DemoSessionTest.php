@@ -1,0 +1,67 @@
+<?php
+
+namespace Tests\Feature\Demo;
+
+use App\Enums\Acl\Role;
+use App\Models\User;
+use Jaybizzle\CrawlerDetect\CrawlerDetect;
+use PHPUnit\Framework\Attributes\Test;
+use Tests\TestCase;
+
+class DemoSessionTest extends TestCase
+{
+    public function setUp(): void
+    {
+        parent::setUp();
+
+        config(['koel.misc.demo' => true]);
+        $this->followRedirects = true;
+        $this->withoutVite();
+    }
+
+    protected function tearDown(): void
+    {
+        config(['koel.misc.demo' => false]);
+        $this->followRedirects = false;
+
+        parent::tearDown();
+    }
+
+    #[Test]
+    public function dynamicallyCreateDemoAccount(): void
+    {
+        $this->mock(CrawlerDetect::class)->expects('isCrawler')->andReturnFalse();
+
+        $demoAccount = $this
+            ->get('/')
+            ->assertSuccessful()
+            ->assertSee('window.KOEL.demo_account', false)
+            ->viewData('demo_account');
+
+        self::assertStringEndsWith('@demo.koel.dev', $demoAccount['email']);
+        self::assertEquals('demo', $demoAccount['password']);
+    }
+
+    #[Test]
+    public function useFixedDemoAccountForBots(): void
+    {
+        $this->mock(CrawlerDetect::class)->expects('isCrawler')->andReturnTrue();
+
+        $this->get('/')->assertSee('window.KOEL.demo_account', false)->assertViewHas('demo_account', [
+            'email' => 'demo@koel.dev',
+            'password' => 'demo',
+        ]);
+    }
+
+    #[Test]
+    public function demoAccountIsProvisionedAsUserNotAdmin(): void
+    {
+        $this->mock(CrawlerDetect::class)->expects('isCrawler')->andReturnFalse();
+
+        $this->get('/')->assertSuccessful();
+
+        $demoUser = User::query()->where('email', 'like', '%@demo.koel.dev')->latest('id')->first();
+
+        self::assertSame(Role::USER, $demoUser->role);
+    }
+}

@@ -1,0 +1,132 @@
+import { defineConfig } from 'vitepress'
+import llmstxt from 'vitepress-plugin-llms'
+
+// https://vitepress.dev/reference/site-config
+export default defineConfig({
+  title: 'koel',
+  description: 'The official documentation for Koel, the music streaming solution that works',
+  head: [
+    [
+      'script',
+      {
+        defer: 'defer',
+        src: 'https://app.lemonsqueezy.com/js/lemon.js',
+      },
+    ],
+    ['link', { rel: 'icon', href: '/favicon.png', type: 'image/x-png' }],
+  ],
+  cleanUrls: true,
+  sitemap: {
+    hostname: 'https://docs.koel.dev',
+  },
+  vite: {
+    plugins: [llmstxt()],
+  },
+  markdown: {
+    linkify: false,
+    image: {
+      lazyLoading: true,
+    },
+  },
+  themeConfig: {
+    search: {
+      provider: 'algolia',
+      options: {
+        appId: '2EQKL1O1UU',
+        apiKey: 'e9d7b5be73f29af4030535a726ec7196',
+        indexName: 'koel',
+      },
+    },
+
+    outline: {
+      level: 'deep',
+    },
+
+    logo: '/logo.svg',
+    logoLink: '/guide/what-is-koel',
+
+    // https://vitepress.dev/reference/default-theme-config
+    nav: [
+      { text: 'Home', link: 'https://koel.dev' },
+      { text: 'Getting Started', link: '/guide/getting-started' },
+      { text: 'Koel Plus', link: '/plus/what-is-koel-plus' },
+    ],
+
+    sidebar: [
+      {
+        text: 'Introduction',
+        items: [
+          { text: 'What Is Koel?', link: '/guide/what-is-koel' },
+          { text: 'Getting Started', link: '/guide/getting-started' },
+          { text: 'Standalone Binary', link: '/guide/standalone-binary' },
+          { text: 'Running with FrankenPHP', link: '/guide/running-with-frankenphp' },
+        ],
+      },
+      {
+        text: 'Usage',
+        items: [
+          { text: 'Music Discovery', link: '/usage/music-discovery' },
+          { text: 'Streaming Music', link: '/usage/streaming' },
+          { text: 'Using the Web Interface', link: '/usage/web-interface' },
+          { text: 'Playlists', link: '/usage/playlists' },
+          { text: 'Instant Search', link: '/usage/search' },
+          { text: 'Themes', link: '/usage/themes' },
+          { text: 'Artist, Album, & Playlist Arts', link: '/usage/artist-album-playlist-arts' },
+          { text: 'Podcasts', link: '/usage/podcasts' },
+          { text: 'Radio', link: '/usage/radio' },
+          { text: 'Offline Playback', link: '/usage/offline-playback' },
+          { text: 'User Management', link: '/usage/user-management' },
+          { text: 'Profile & Preferences', link: '/usage/profile-preferences' },
+          { text: 'Two-Factor Authentication', link: '/usage/two-factor-authentication' },
+          { text: 'Remote Controller', link: '/usage/remote-controller' },
+          { text: 'Subsonic Clients', link: '/usage/subsonic' },
+          { text: 'Embedding', link: '/usage/embedding' },
+        ],
+      },
+      {
+        text: 'Koel Plus',
+        items: [
+          { text: 'What Is Koel Plus?', link: '/plus/what-is-koel-plus' },
+          { text: 'Purchase & Activation', link: '/plus/purchase-activation' },
+          { text: 'Cloud Storage Support', link: '/plus/cloud-storage-support' },
+          { text: 'Collaboration', link: '/plus/collaboration' },
+          { text: 'Single Sign-On', link: '/plus/sso' },
+          { text: 'Proxy Authentication', link: '/plus/proxy-auth' },
+          { text: 'Media Browser', link: '/plus/media-browser' },
+          { text: 'White Labeling', link: '/plus/white-labeling' },
+          { text: 'Custom Themes', link: '/plus/custom-themes' },
+          { text: 'AI Assistant', link: '/plus/ai-assistant' },
+          { text: 'Ticketmaster', link: '/plus/ticketmaster' },
+        ],
+      },
+      {
+        text: 'Service Integrations',
+        link: '/service-integrations.md',
+      },
+      {
+        text: 'Mobile Apps',
+        link: '/mobile-apps',
+      },
+      {
+        text: 'CLI Commands',
+        link: '/cli-commands',
+      },
+      {
+        text: 'Environment Variables',
+        link: '/environment-variables',
+      },
+      {
+        text: 'Local Development',
+        link: '/development',
+      },
+      {
+        text: 'Troubleshooting',
+        link: '/troubleshooting',
+      },
+    ],
+
+    socialLinks: [
+      { icon: 'github', link: 'https://github.com/koel/koel' },
+    ],
+  },
+})

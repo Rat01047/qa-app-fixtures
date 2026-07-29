@@ -1,0 +1,57 @@
+<?php
+
+namespace App\Models;
+
+use App\Models\Contracts\Favoriteable;
+use Carbon\Carbon;
+use Database\Factories\FavoriteFactory;
+use Illuminate\Database\Eloquent\Attributes\Unguarded;
+use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+
+/**
+ * @property Carbon $created_at
+ * @property Favoriteable $favoriteable
+ * @property User $user
+ * @property int $id
+ * @property string $favoriteable_id
+ * @property string $favoriteable_type
+ * @property int $position
+ *
+ * @method static FavoriteFactory factory(...$parameters)
+ */
+#[Unguarded]
+#[WithoutTimestamps]
+class Favorite extends Model
+{
+    use HasFactory;
+
+    protected $with = ['user', 'favoriteable'];
+
+    protected function casts(): array
+    {
+        return [
+            'created_at' => 'datetime',
+        ];
+    }
+
+    public static function booted(): void
+    {
+        static::creating(static function (self $favorite): void {
+            $favorite->created_at ??= now();
+        });
+    }
+
+    public function favoriteable(): MorphTo
+    {
+        return $this->morphTo();
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+}

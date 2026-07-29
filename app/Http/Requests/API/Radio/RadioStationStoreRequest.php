@@ -1,0 +1,55 @@
+<?php
+
+namespace App\Http\Requests\API\Radio;
+
+use App\Http\Requests\API\Request;
+use App\Rules\HasAudioContentType;
+use App\Rules\SafeUrl;
+use App\Rules\ValidImageData;
+use App\Values\Radio\RadioStationCreateData;
+use Illuminate\Validation\Rule;
+
+/**
+ * @property-read string $name
+ * @property-read string $url
+ * @property-read ?string $logo
+ * @property-read ?string $description
+ * @property-read ?bool $is_public
+ * @property-read ?string $homepage_url
+ */
+class RadioStationStoreRequest extends Request
+{
+    /** @inheritdoc */
+    public function rules(): array
+    {
+        return [
+            'url' => [
+                'bail',
+                'required',
+                'url',
+                Rule::unique('radio_stations')->where(function ($query) {
+                    return $query->where('user_id', $this->user()->id);
+                }),
+                new SafeUrl(),
+                new HasAudioContentType(),
+            ],
+            'name' => ['required', 'string', 'max:191'],
+            'logo' => ['nullable', new ValidImageData()],
+            'description' => ['sometimes', 'nullable', 'string'],
+            'is_public' => ['boolean', 'nullable'],
+            'homepage_url' => ['sometimes', 'nullable', 'url'],
+        ];
+    }
+
+    public function toDto(): RadioStationCreateData
+    {
+        return RadioStationCreateData::make(
+            url: $this->url,
+            name: $this->name,
+            description: $this->string('description'),
+            logo: $this->logo,
+            isPublic: $this->is_public,
+            homepageUrl: $this->homepage_url,
+        );
+    }
+}

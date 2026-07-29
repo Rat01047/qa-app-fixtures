@@ -1,0 +1,23 @@
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Interaction;
+use App\Models\Song;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/** @extends Factory<Interaction> */
+class InteractionFactory extends Factory
+{
+    /** @inheritdoc */
+    public function definition(): array
+    {
+        return [
+            'song_id' => Song::factory(),
+            'user_id' => User::factory(),
+            'play_count' => fake()->randomNumber(),
+            'last_played_at' => now(),
+        ];
+    }
+}

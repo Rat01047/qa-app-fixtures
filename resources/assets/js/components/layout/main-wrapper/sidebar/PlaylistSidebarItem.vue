@@ -1,0 +1,180 @@
+<template>
+  <SidebarItem
+    :class="{ droppable }"
+    :href="href"
+    class="playlist select-none"
+    :draggable="!isMobile.any"
+    :active
+    @dblclick="onDblClick"
+    @contextmenu="onContextMenu"
+    @dragleave="onDragLeave"
+    @dragover="onDragOver"
+    @dragstart.stop="onDragStart"
+    @drop="onDrop"
+  >
+    <template #icon>
+      <Icon v-if="isRecentlyPlayedList(list)" :icon="faClockRotateLeft" fixed-width />
+      <Icon v-else-if="isFavoriteList(list)" :icon="faHeart" fixed-width />
+      <Icon v-else-if="list.is_smart" :icon="faWandMagicSparkles" fixed-width />
+      <Icon v-else-if="list.is_collaborative" :icon="faUsers" fixed-width />
+      <ListMusicIcon v-else :size="16" />
+    </template>
+    {{ list.name }}
+  </SidebarItem>
+</template>
+
+<script lang="ts" setup>
+import { faClockRotateLeft, faHeart, faUsers, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons'
+import isMobile from 'ismobilejs'
+import { ListMusicIcon } from 'lucide-vue-next'
+import { computed, inject, ref, toRefs } from 'vue'
+import { defineAsyncComponent } from '@/utils/helpers'
+import { playableStore } from '@/stores/playableStore'
+import { recentlyPlayedStore } from '@/stores/recentlyPlayedStore'
+import { useRouter } from '@/composables/useRouter'
+import { useDraggable, useDroppable } from '@/composables/useDragAndDrop'
+import { usePlaylistContentManagement } from '@/composables/usePlaylistContentManagement'
+import { useContextMenu } from '@/composables/useContextMenu'
+import { playback } from '@/services/playbackManager'
+import { DraggedPlaylistKey } from '@/config/symbols'
+
+import SidebarItem from '@/components/layout/main-wrapper/sidebar/SidebarItem.vue'
+
+const props = defineProps<{ list: PlaylistLike }>()
+
+const PlaylistContextMenu = defineAsyncComponent(() => import('@/components/playlist/PlaylistContextMenu.vue'))
+
+const { url, isCurrentScreen, getRouteParam } = useRouter()
+const { startDragging } = useDraggable('playlist')
+const { acceptsDrop, resolveDroppedItems } = useDroppable(['playables', 'album', 'artist', 'browser-media'])
+const { openContextMenu } = useContextMenu()
+
+const draggedPlaylist = inject(DraggedPlaylistKey, ref<Playlist | null>(null))
+
+const droppable = ref(false)
+
+const { addToPlaylist } = usePlaylistContentManagement()
+
+const { list } = toRefs(props)
+
+const isPlaylist = (list: PlaylistLike): list is Playlist => 'id' in list
+const isFavoriteList = (list: PlaylistLike): list is FavoriteList => list.name === 'Favorites'
+const isRecentlyPlayedList = (list: PlaylistLike): list is RecentlyPlayedList => list.name === 'Recently Played'
+
+const active = computed(() => {
+  return (
+    (isCurrentScreen('Favorites') && isFavoriteList(list.value)) ||
+    (isCurrentScreen('RecentlyPlayed') && isRecentlyPlayedList(list.value)) ||
+    (isCurrentScreen('Playlist') && (list.value as Playlist).id === getRouteParam('id'))
+  )
+})
+
+const href = computed(() => {
+  if (isPlaylist(list.value)) {
+    return url('playlists.show', { id: list.value.id })
+  }
+
+  if (isFavoriteList(list.value)) {
+    return url('favorites')
+  }
+
+  if (isRecentlyPlayedList(list.value)) {
+    return url('recently-played')
+  }
+
+  throw new Error('Invalid playlist-like type.')
+})
+
+const contentEditable = computed(() => {
+  if (isRecentlyPlayedList(list.value)) {
+    return false
+  }
+  if (isFavoriteList(list.value)) {
+    return true
+  }
+
+  return !list.value.is_smart
+})
+
+const onContextMenu = (event: MouseEvent) => {
+  if (isPlaylist(list.value)) {
+    event.preventDefault()
+    openContextMenu<'PLAYLIST'>(PlaylistContextMenu, event, {
+      playlist: list.value,
+    })
+  }
+}
+
+const onDblClick = async () => {
+  let playables: Playable[]
+
+  if (isFavoriteList(list.value)) {
+    playables = await playableStore.fetchFavorites()
+  } else if (isRecentlyPlayedList(list.value)) {
+    playables = await recentlyPlayedStore.fetch()
+  } else {
+    playables = await playableStore.fetchForPlaylist(list.value as Playlist)
+  }
+
+  if (playables.length) {
+    playback().queueAndPlay(playables)
+  }
+}
+
+const onDragStart = (event: DragEvent) => {
+  if (!isPlaylist(list.value)) {
+    return
+  }
+
+  startDragging(event, list.value)
+  draggedPlaylist.value = list.value
+}
+
+const onDragOver = (event: DragEvent) => {
+  if (!contentEditable.value || !acceptsDrop(event)) {
+    return
+  }
+
+  event.preventDefault()
+  event.stopPropagation()
+  droppable.value = true
+}
+
+const onDragLeave = (event: DragEvent) => {
+  if (!droppable.value) {
+    return
+  }
+
+  event.stopPropagation()
+  droppable.value = false
+}
+
+const onDrop = async (event: DragEvent) => {
+  if (!contentEditable.value || !acceptsDrop(event)) {
+    return
+  }
+
+  event.preventDefault()
+  event.stopPropagation()
+  droppable.value = false
+
+  const playables = await resolveDroppedItems(event)
+
+  if (!playables?.length) {
+    return
+  }
+
+  if (isFavoriteList(list.value)) {
+    await playableStore.favorite(playables)
+  } else if (isPlaylist(list.value)) {
+    await addToPlaylist(list.value, playables)
+  }
+}
+</script>
+
+<style lang="postcss" scoped>
+@reference '@css/app.pcss';
+.droppable {
+  @apply ring-1 ring-offset-0 ring-k-highlight rounded-md cursor-copy;
+}
+</style>

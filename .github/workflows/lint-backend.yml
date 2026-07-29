@@ -1,0 +1,40 @@
+name: Backend Lint and Static Analysis
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths-ignore:
+      - resources/assets/**
+      - docs/**
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - resources/assets/**
+      - docs/**
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: [ 8.3 ]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          tools: composer:v2
+      - name: Install PHP dependencies
+        uses: ramsey/composer-install@v2
+        with:
+          composer-options: --prefer-dist
+      - name: Run code style checker
+        run: composer cs
+      - name: Run linter
+        run: composer lint
+      - name: Run static analysis
+        run: composer analyze -- --no-progress

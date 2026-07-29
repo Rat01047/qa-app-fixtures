@@ -1,0 +1,20 @@
+<?php
+
+namespace App\Rules;
+
+use App\Values\SmartPlaylist\SmartPlaylistRuleGroupCollection;
+use Closure;
+use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Support\Arr;
+
+class ValidSmartPlaylistRulePayload implements ValidationRule
+{
+    public function validate(string $attribute, mixed $value, Closure $fail): void
+    {
+        $passes = (bool) rescue(static fn () => SmartPlaylistRuleGroupCollection::create(Arr::wrap($value)));
+
+        if (!$passes) {
+            $fail('Invalid smart playlist rules');
+        }
+    }
+}

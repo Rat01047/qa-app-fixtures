@@ -1,0 +1,67 @@
+<?php
+
+namespace Tests;
+
+use App\Models\Playlist;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Collection;
+
+function create_user(array $attributes = []): User
+{
+    return User::factory()->createOne($attributes);
+}
+
+function create_admin(array $attributes = []): User
+{
+    return User::factory()->admin()->createOne($attributes);
+}
+
+function create_manager(array $attributes = []): User
+{
+    return User::factory()->manager()->createOne($attributes);
+}
+
+function create_guest(array $attributes = []): User
+{
+    return User::factory()->guest()->createOne($attributes);
+}
+
+function create_user_prospect(array $attributes = []): User
+{
+    return User::factory()->prospect()->createOne($attributes);
+}
+
+function test_path(string $path = ''): string
+{
+    return base_path('tests' . DIRECTORY_SEPARATOR . ltrim($path, DIRECTORY_SEPARATOR));
+}
+
+function create_playlist(array $attributes = [], bool $smart = false): Playlist
+{
+    return $smart ? Playlist::factory()->smart()->createOne($attributes) : Playlist::factory()->createOne($attributes);
+}
+
+/**
+ * @return Collection<int, Playlist>
+ */
+function create_playlists(int $count, array $attributes = [], ?User $owner = null): Collection
+{
+    return Playlist::factory()
+        ->count($count)
+        ->create($attributes)
+        ->when($owner, static function (Collection $playlists) use ($owner): void {
+            $playlists->each(static function (Playlist $p) use ($owner): void {
+                $p->users()->detach();
+                $p->users()->attach($owner, ['role' => 'owner']);
+            });
+        });
+}
+
+/**
+ * A minimal base64 encoded image that's still valid binary data and can be used
+ * in tests that involve reading/writing image files.
+ */
+function minimal_base64_encoded_image(): string
+{
+    return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAADklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII';
+}

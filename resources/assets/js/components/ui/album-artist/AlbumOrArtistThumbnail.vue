@@ -1,0 +1,81 @@
+<template>
+  <button
+    :class="size"
+    :style="{ backgroundImage: `url(${defaultCover})` }"
+    class="thumbnail group relative w-full aspect-square bg-no-repeat bg-cover bg-center overflow-hidden active:scale-95"
+    data-testid="album-artist-thumbnail"
+    type="button"
+    @click.prevent="playOrQueue"
+  >
+    <img alt="Thumbnail" :src="image" class="w-full aspect-square object-cover" loading="lazy" />
+    <span class="hidden">{{ buttonLabel }}</span>
+    <span class="absolute top-0 left-0 w-full h-full group-hover:bg-black/40 no-hover:bg-black/40 z-10" />
+    <PlayIcon :size />
+  </button>
+</template>
+
+<script lang="ts" setup>
+import { orderBy } from 'lodash-es'
+import { computed, toRefs } from 'vue'
+import { queueStore } from '@/stores/queueStore'
+import { playableStore } from '@/stores/playableStore'
+import { useRouter } from '@/composables/useRouter'
+import { useMessageToaster } from '@/composables/useMessageToaster'
+import { playback } from '@/services/playbackManager'
+import { useBranding } from '@/composables/useBranding'
+
+import PlayIcon from '@/components/ui/PlayIcon.vue'
+
+const props = withDefaults(defineProps<{ entity: Album | Artist; size?: 'sm' | 'lg' }>(), { size: 'lg' })
+const { entity } = toRefs(props)
+
+const { toastSuccess } = useMessageToaster()
+const { go, url } = useRouter()
+const { cover: defaultCover } = useBranding()
+
+const forAlbum = computed(() => entity.value.type === 'albums')
+const sortFields = computed(() => (forAlbum.value ? ['disc', 'track'] : ['album_id', 'disc', 'track']))
+
+const image = computed(() => {
+  return forAlbum.value ? (entity.value as Album).cover || defaultCover : (entity.value as Artist).image || defaultCover
+})
+
+const buttonLabel = computed(() =>
+  forAlbum.value ? `Play all songs in the album ${entity.value.name}` : `Play all songs by ${entity.value.name}`,
+)
+
+const playOrQueue = async (event: MouseEvent) => {
+  const songs = forAlbum.value
+    ? await playableStore.fetchSongsForAlbum(entity.value as Album)
+    : await playableStore.fetchSongsForArtist(entity.value as Artist)
+
+  if (event.altKey) {
+    queueStore.queue(orderBy(songs, sortFields.value))
+    toastSuccess('Songs added to queue.')
+    return
+  }
+
+  playback().queueAndPlay(songs)
+  go(url('queue'))
+}
+</script>
+
+<style lang="postcss" scoped>
+@reference '@css/app.pcss';
+
+.thumbnail.sm {
+  @apply rounded-md;
+}
+
+.thumbnail.lg {
+  @apply rounded-xl;
+}
+
+.droppable {
+  @apply border-2 border-dotted border-white brightness-50;
+
+  * {
+    pointer-events: none;
+  }
+}
+</style>

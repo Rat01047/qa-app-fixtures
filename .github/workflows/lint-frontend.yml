@@ -1,0 +1,41 @@
+name: Frontend Lint
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - resources/assets/**
+      - package.json
+      - .github/workflows/lint-frontend.yml
+  push:
+    branches:
+      - master
+      - next
+    paths:
+      - resources/assets/**
+      - package.json
+      - .github/workflows/lint-frontend.yml
+  workflow_dispatch:
+
+env:
+  LARAVEL_BYPASS_ENV_CHECK: 1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [ 22 ]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+      - uses: pnpm/action-setup@v6
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check (format + lint)
+        run: pnpm exec vp check resources/assets
+      - name: Type check
+        run: pnpm typecheck

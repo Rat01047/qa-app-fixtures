@@ -1,0 +1,95 @@
+<template>
+  <header
+    :class="[layout, disabled ? 'disabled' : '']"
+    class="screen-header gap-4 min-h-0 md:min-h-full flex items-end shrink-0 relative content-stretch leading-normal p-6 border-b border-b-k-fg-5"
+  >
+    <aside v-if="$slots.thumbnail" class="thumbnail-wrapper hidden md:flex items-end overflow-hidden rounded-md">
+      <slot name="thumbnail" />
+    </aside>
+
+    <main class="flex flex-1 gap-5 items-center overflow-hidden">
+      <div class="w-full flex-1 overflow-hidden">
+        <h1 class="name text-k-fg mr-4 font-thin md:font-bold my-0 leading-tight overflow-hidden">
+          <MarqueeText hover-only :speed="70">
+            <slot />
+          </MarqueeText>
+        </h1>
+        <span v-if="$slots.meta" class="meta hidden text-[0.9rem] leading-loose">
+          <slot name="meta" />
+        </span>
+      </div>
+
+      <slot name="controls" />
+    </main>
+  </header>
+</template>
+
+<script lang="ts" setup>
+import MarqueeText from '@/components/ui/MarqueeText.vue'
+
+withDefaults(
+  defineProps<{
+    layout?: ScreenHeaderLayout
+    disabled?: boolean
+  }>(),
+  {
+    layout: 'expanded',
+    disabled: false,
+  },
+)
+</script>
+
+<style lang="postcss" scoped>
+@reference '@css/app.pcss';
+header.screen-header {
+  --transition-duration: 300ms;
+
+  .thumbnail-wrapper {
+    @apply origin-top duration-(--transition-duration) translate-y-0 opacity-100 w-[192px];
+    will-change: transform, opacity;
+    transition-property: transform, opacity;
+  }
+
+  &.collapsed {
+    @apply gap-0;
+
+    .thumbnail-wrapper {
+      @apply -translate-y-full opacity-0 w-0;
+    }
+  }
+
+  &.disabled {
+    @apply opacity-50 cursor-not-allowed;
+
+    *,
+    *::before,
+    *::after {
+      @apply pointer-events-none;
+    }
+  }
+
+  &.expanded {
+    .meta {
+      @apply block;
+    }
+
+    main {
+      @apply flex-col items-start;
+    }
+  }
+
+  h1.name {
+    font-size: clamp(1.8rem, 3vw, 4rem);
+  }
+
+  .meta {
+    a {
+      @apply text-k-fg hover:text-k-highlight;
+    }
+
+    :deep(> * + *) {
+      @apply ml-1 inline-block before:content-['•'] before:mr-1 before:text-k-fg-70;
+    }
+  }
+}
+</style>

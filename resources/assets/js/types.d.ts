@@ -1,0 +1,851 @@
+declare module '*.vue'
+declare module '*.jpg'
+declare module '*.png'
+declare module '*.svg'
+
+declare type Closure<T = unknown | any> = (...args: Array<unknown | any>) => T
+
+declare module 'sketch-js' {
+  function create(config: Record<string, any>): any
+}
+
+declare module 'youtube-player' {
+  import type { YouTubePlayer } from 'youtube-player/dist/types'
+
+  function createYouTubePlayer(name: string, options: Record<string, any>): YouTubePlayer
+
+  export default createYouTubePlayer
+}
+
+declare module 'ismobilejs' {
+  let apple: { device: boolean }
+  let any: boolean
+  let phone: boolean
+}
+
+declare module 'nouislider' {
+  function create(
+    el: HTMLElement,
+    config: {
+      connect: boolean[]
+      start: number
+      range: {
+        min: number
+        max: number
+      }
+      orientation: 'horizontal' | 'vertical'
+      direction: 'ltr' | 'rtl'
+      step?: number
+    },
+  ): void
+}
+
+interface Constructable<T> {
+  new (...args: any): T
+}
+
+type MaybeArray<T> = T | T[]
+
+interface CompositeToken {
+  'audio-token': string
+  token: string
+}
+
+interface TwoFactorChallengeRequired {
+  two_factor: true
+  login_token: string
+}
+
+type LoginResponse = CompositeToken | TwoFactorChallengeRequired
+
+type SSOProvider = 'Google' | 'OpenID Connect' | 'Reverse Proxy'
+
+interface KoelGlobals {
+  base_url: string
+  is_demo: boolean
+  pusher: {
+    readonly app_key: string
+    readonly app_cluster: string
+  }
+  branding: Branding
+  mailer_configured: boolean
+  sso_providers: SSOProvider[]
+  sso_oidc_label?: string
+  accepted_audio_extensions: string[]
+  demo_account?: {
+    email: string
+    password: string
+  }
+  auth_token?: CompositeToken | null
+}
+
+interface Window {
+  KOEL: KoelGlobals
+
+  RUNNING_UNIT_TESTS?: boolean
+
+  readonly MediaMetadata: Constructable<Record<string, any>>
+  createLemonSqueezy?: () => Closure
+
+  LemonSqueezy: {
+    Url: {
+      Open: (url: string) => void
+    }
+  }
+}
+
+interface FileSystemEntry {
+  createReader: () => FileSystemDirectoryReader
+}
+
+interface Branding {
+  name: string
+  logo: string
+  cover: string
+}
+
+type EncyclopediaDisplayMode = 'aside' | 'full'
+type ScreenHeaderLayout = 'expanded' | 'collapsed'
+
+interface AlbumTrack {
+  readonly title: string
+  readonly length: number
+}
+
+interface AlbumInfo {
+  cover: string | null
+  readonly tracks: AlbumTrack[]
+  wiki?: {
+    summary: string
+    full: string
+  }
+  url?: string
+}
+
+interface ArtistInfo {
+  image: string | null
+  bio?: {
+    summary: string
+    full: string
+  }
+  url?: string
+}
+
+interface Artist {
+  type: 'artists'
+  readonly id: string
+  name: string
+  image: string // empty string = no image
+  created_at: string
+  is_external: boolean
+  favorite: boolean
+  rating: number
+  permissions: {
+    edit: boolean
+  }
+}
+
+interface Album {
+  type: 'albums'
+  readonly id: string
+  artist_id: Artist['id']
+  artist_name: Artist['name']
+  name: string
+  cover: string // empty string = no cover
+  thumbnail?: string | null
+  created_at: string
+  year: number | null
+  length: number
+  is_external: boolean
+  favorite: boolean
+  rating: number
+  permissions: {
+    edit: boolean
+  }
+}
+
+interface IStreamable {
+  readonly type: Song['type'] | Episode['type'] | RadioStation['type']
+  readonly id: string
+  favorite: boolean
+  playback_state?: PlaybackState
+  created_at: string
+}
+
+interface BasePlayable extends IStreamable {
+  type: Song['type'] | Episode['type']
+  title: string
+  readonly length: number
+  play_count_registered?: boolean
+  play_count: number
+  rating: number // 0-5, current user's rating; 0 = unrated
+  play_start_time?: number
+  preloaded?: boolean
+  playback_state?: PlaybackState
+  fmt_length?: string
+  embed_stream_url?: string // only when embedded
+}
+
+interface Song extends BasePlayable {
+  type: 'songs'
+  readonly owner_id: User['id']
+  album_id: Album['id']
+  album_name: Album['name']
+  album_cover: Album['cover']
+  artist_id: Artist['id']
+  artist_name: Artist['name']
+  album_artist_id: Artist['id']
+  album_artist_name: Artist['name']
+  genre: string
+  track: number | null
+  disc: number
+  year: number | null
+  lyrics: string
+  is_public: boolean
+  is_external: boolean
+  basename?: string
+  deleted?: boolean
+  collaboration?: {
+    user: PlaylistCollaborator
+    added_at: string | null
+    fmt_added_at: string | null
+  }
+}
+
+interface Episode extends BasePlayable {
+  type: 'episodes'
+  episode_link: string | null
+  episode_description: string
+  episode_image: string
+  podcast_id: string
+  podcast_title: string
+  podcast_author: string
+}
+
+interface RadioStation extends IStreamable {
+  readonly type: 'radio-stations'
+  name: string
+  url: string
+  homepage_url: string | null
+  logo: string | null
+  description: string
+  is_public: boolean
+  permissions: {
+    edit: boolean
+    delete: boolean
+  }
+}
+
+type Playable = Song | Episode
+type Streamable = Playable | RadioStation
+type Embeddable = Playable | Playlist | Artist | Album
+
+interface Embed {
+  type: 'embeds'
+  id: string
+  user_id: User['id']
+  embeddable_id: Embeddable['id']
+  embeddable_type: 'playable' | 'playlist' | 'artist' | 'album'
+}
+
+type WidgetReadyEmbed = Embed & {
+  embeddable: Embeddable
+  playables: Playable[]
+}
+
+interface QueueState {
+  type: 'queue-states'
+  songs: Playable[]
+  current_song: Playable | null
+  playback_position: number
+}
+
+interface SmartPlaylistRuleGroup {
+  id: string
+  rules: SmartPlaylistRule[]
+}
+
+interface SmartPlaylistModel {
+  name:
+    | 'title'
+    | 'length'
+    | 'created_at'
+    | 'updated_at'
+    | 'album.name'
+    | 'artist.name'
+    | 'interactions.play_count'
+    | 'interactions.last_played_at'
+    | 'genre'
+    | 'year'
+  type: 'text' | 'number' | 'date'
+  label: string
+  unit?: 'seconds' | 'days'
+}
+
+interface SmartPlaylistOperator {
+  operator:
+    | 'is'
+    | 'isNot'
+    | 'contains'
+    | 'notContain'
+    | 'isBetween'
+    | 'isGreaterThan'
+    | 'isLessThan'
+    | 'beginsWith'
+    | 'endsWith'
+    | 'inLast'
+    | 'notInLast'
+  label: string
+  type?: SmartPlaylistModel['type'] // to override
+  unit?: SmartPlaylistModel['unit'] // to override
+  inputs?: number
+}
+
+interface SmartPlaylistRule {
+  id: string
+  model: SmartPlaylistModel
+  operator: SmartPlaylistOperator['operator']
+  value: any[]
+}
+
+interface SerializedSmartPlaylistRule {
+  id: string
+  model: SmartPlaylistModel['name']
+  operator: SmartPlaylistOperator['operator']
+  value: any[]
+}
+
+type SmartPlaylistInputTypes = Record<SmartPlaylistModel['type'], SmartPlaylistOperator[]>
+
+interface FavoriteList {
+  name: 'Favorites'
+  playables: Playable[]
+}
+
+interface RecentlyPlayedList {
+  name: 'Recently Played'
+  playables: Playable[]
+}
+
+interface PlaylistFolder {
+  type: 'playlist-folders'
+  readonly id: string
+  name: string
+  parent_id: PlaylistFolder['id'] | null
+  // we don't need to keep track of the playlists here, as they can be computed using their folder_id value
+}
+
+type PlaylistCollaborator = Pick<User, 'id' | 'name' | 'avatar'> & {
+  type: 'playlist-collaborators'
+}
+
+interface Playlist {
+  type: 'playlists'
+  readonly id: string
+  readonly owner_id: User['id']
+  name: string
+  description: string
+  folder_id: PlaylistFolder['id'] | null
+  is_smart: boolean
+  is_collaborative: boolean
+  rules: SmartPlaylistRuleGroup[]
+  cover: string | null
+  playables?: Playable[]
+  permissions: {
+    edit: boolean
+    delete: boolean
+  }
+}
+
+type PlaylistLike = Playlist | FavoriteList | RecentlyPlayedList
+
+interface Podcast {
+  readonly type: 'podcasts'
+  readonly id: string
+  readonly title: string
+  readonly url: string
+  readonly link: string
+  readonly image: string
+  readonly description: string
+  readonly author: string
+  readonly subscribed_at: string
+  readonly last_played_at: string
+  readonly state: {
+    current_episode: Playable['id'] | null
+    progresses: Record<Playable['id'], number>
+  }
+  favorite: boolean
+  rating: number // 0-5, current user's rating; 0 = unrated
+}
+
+interface YouTubeVideo {
+  readonly id: {
+    videoId: string
+  }
+
+  readonly snippet: {
+    title: string
+    description: string
+    thumbnails: {
+      default: {
+        url: string
+      }
+    }
+  }
+}
+
+interface UserPreferences extends Record<string, any> {
+  volume: number
+  show_now_playing_notification: boolean
+  repeat_mode: RepeatMode
+  confirm_before_closing: boolean
+  continuous_playback: boolean
+  current_equalizer_preset: EqualizerPreset
+  equalizer_presets: EqualizerPreset[]
+  albums_view_mode: ViewMode
+  artists_view_mode: ViewMode
+  radio_stations_view_mode: ViewMode
+  albums_sort_field: AlbumListSortField
+  artists_sort_field: ArtistListSortField
+  genres_sort_field: GenreListSortField
+  podcasts_sort_field: PodcastListSortField
+  radio_stations_sort_field: RadioStationListSortField
+  albums_sort_order: SortOrder
+  artists_sort_order: SortOrder
+  podcasts_sort_order: SortOrder
+  genres_sort_order: SortOrder
+  radio_stations_sort_order: SortOrder
+  albums_favorites_only: boolean
+  artists_favorites_only: boolean
+  podcasts_favorites_only: boolean
+  radio_stations_favorites_only: boolean
+  transcode_on_mobile: boolean
+  transcode_quality: number
+  support_bar_no_bugging: boolean
+  show_album_art_overlay: boolean
+  lyrics_zoom_level: number | null
+  theme?: Theme['id'] | null
+  visualizer?: Visualizer['id'] | null
+  active_extra_panel_tab: SideSheetTab | null
+  make_uploads_public: boolean
+  detect_duplicate_uploads: boolean
+  include_public_media: boolean
+  crossfade_duration: number
+  lastfm_session_key?: string
+  home_blocks_order: string[]
+}
+
+type Ability = 'manage settings' | 'manage users' | 'manage songs' | 'manage podcasts' | 'manage radio stations'
+type Role = ('admin' | 'manager' | 'user' | 'guest') & string
+
+interface User {
+  type: 'users'
+  id: string
+  name: string
+  email: string
+  is_prospect: boolean
+  password?: string
+  avatar: string
+  role: Role
+  sso_provider: SSOProvider | null
+  sso_id: string | null
+  preferences?: UserPreferences
+  /**
+   * Capabilities this user has been granted (via their role) — i.e. "what *I*
+   * have the ability to do globally". Things like "manage settings" or
+   * "manage songs". Only populated for the current user (the one making the
+   * request); undefined for other users in a list.
+   */
+  abilities?: Ability[]
+  /**
+   * The user's personal Subsonic API key. Only populated for the current user
+   * (their own /me response); never leaked through user listings.
+   */
+  subsonic_api_key?: string
+  two_factor?: boolean
+  /**
+   * What the *current user* (the one making the request) is permitted to do
+   * *to this user* — the result of running UserPolicy from their perspective.
+   * Distinct from `abilities` above, which is the user's own globally-granted
+   * capabilities. Always populated, regardless of who is being looked at.
+   */
+  permissions: {
+    edit: boolean
+    delete: boolean
+  }
+}
+
+type CurrentUser = User & {
+  preferences: UserPreferences
+  abilities: Ability[]
+  subsonic_api_key: string
+  two_factor: boolean
+}
+
+interface Settings {
+  media_path?: string
+}
+
+interface Interaction {
+  type: 'interactions'
+  readonly id: number
+  readonly song_id: Playable['id']
+  play_count: number
+}
+
+interface Favorite {
+  readonly type: 'favorites'
+  readonly favoriteable_id: string
+  readonly favoriteable_type: 'playable' | 'podcast' | 'album' | 'artist'
+  readonly user_id: User['id']
+  readonly created_at: string
+}
+
+interface EqualizerBandElement extends HTMLElement {
+  noUiSlider: {
+    destroy: () => void
+    on: (eventName: 'change' | 'slide', handler: (value: string[], handle: number) => void) => void
+    set: (options: number | any[]) => void
+  }
+
+  isPreamp: boolean
+}
+
+interface OverlayState {
+  dismissible: boolean
+  type: 'loading' | 'success' | 'info' | 'warning' | 'error'
+  message: string
+}
+
+interface PlayableRow {
+  playable: Playable
+  selected: boolean
+}
+
+interface EqualizerPreset {
+  /** Present when this is a user-saved custom preset; absent on built-ins and on the modified-but-unsaved state. */
+  id?: string
+  name: string | null
+  preamp: number
+  gains: number[]
+}
+
+declare type PlaybackState = 'Stopped' | 'Playing' | 'Paused'
+declare type ScreenName =
+  | '404'
+  | 'AI'
+  | 'Album'
+  | 'Albums'
+  | 'Artist'
+  | 'Artists'
+  | 'Default'
+  | 'Embed'
+  | 'Episode'
+  | 'Favorites'
+  | 'Genre'
+  | 'Genres'
+  | 'Home'
+  | 'Invitation.Accept'
+  | 'MediaBrowser'
+  | 'OfflineSongs'
+  | 'Password.Reset'
+  | 'Playlist'
+  | 'Playlist.Collaborate'
+  | 'Podcast'
+  | 'Podcasts'
+  | 'Profile'
+  | 'Queue'
+  | 'Radio.Stations'
+  | 'RecentlyPlayed'
+  | 'Search.Excerpt'
+  | 'Search.Playables'
+  | 'Settings'
+  | 'Songs'
+  | 'Upload'
+  | 'Users'
+  | 'Visualizer'
+  | 'YouTube'
+
+declare type CardLayout = 'full' | 'compact'
+
+interface AddToMenuConfig {
+  queue: boolean
+  favorites: boolean
+}
+
+interface PlayableListControlsConfig {
+  addTo: AddToMenuConfig
+  clearQueue: boolean
+  refresh: boolean
+  filter: boolean
+}
+
+type ThemeableProperty =
+  | '--color-fg'
+  | '--color-bg'
+  | '--color-highlight'
+  | '--bg-image'
+  | '--bg-position'
+  | '--bg-attachment'
+  | '--bg-size'
+  | '--font-family'
+  | '--font-size'
+
+interface Theme {
+  id: string
+  name: string
+  thumbnail_color: string
+  thumbnail_image?: string
+  selected?: boolean
+  properties?: Partial<Record<ThemeableProperty, string>>
+  is_custom?: boolean
+}
+
+type ViewMode = 'grid' | 'list' | 'table'
+
+type RepeatMode = 'NO_REPEAT' | 'REPEAT_ALL' | 'REPEAT_ONE'
+
+interface PlayableListConfig {
+  filterable: boolean
+  sortable: boolean
+  reorderable: boolean
+  collaborative: boolean
+  hasCustomOrderSort: boolean
+  hasHeader: boolean
+}
+
+interface PlayableListContext {
+  entity?: Playlist | Album | Artist | Genre
+  type?: Extract<
+    ScreenName,
+    | 'Home'
+    | 'Songs'
+    | 'Album'
+    | 'Artist'
+    | 'Playlist'
+    | 'Favorites'
+    | 'RecentlyPlayed'
+    | 'Queue'
+    | 'Genre'
+    | 'Search.Playables'
+    | 'OfflineSongs'
+  >
+}
+
+type PlayableListSortField =
+  | keyof Pick<
+      Song,
+      | 'track'
+      | 'disc'
+      | 'title'
+      | 'album_name'
+      | 'length'
+      | 'artist_name'
+      | 'genre'
+      | 'year'
+      | 'created_at'
+      | 'rating'
+      | 'favorite'
+    >
+  | keyof Pick<Episode, 'podcast_author' | 'podcast_title'>
+  | 'position'
+  | 'collaboration.user.name'
+  | 'collaboration.added_at'
+
+type AlbumListSortField = keyof Pick<
+  Album,
+  'name' | 'year' | 'artist_name' | 'created_at' | 'length' | 'rating' | 'favorite'
+>
+type ArtistListSortField = keyof Pick<Artist, 'name' | 'created_at' | 'rating' | 'favorite'>
+type GenreListSortField = keyof Pick<Genre, 'name' | 'song_count'>
+type PodcastListSortField = keyof Pick<Podcast, 'title' | 'last_played_at' | 'subscribed_at' | 'author'>
+type RadioStationListSortField = keyof Pick<RadioStation, 'name' | 'created_at' | 'favorite'>
+
+type RadioStationTableColumnName = 'name' | 'description' | 'created_at' | 'favorite'
+type SortField =
+  | PodcastListSortField
+  | AlbumListSortField
+  | ArtistListSortField
+  | RadioStationListSortField
+  | GenreListSortField
+
+interface BasicListSorterDropDownItem<T extends SortField> {
+  label: string
+  field: T
+}
+
+type SortOrder = 'asc' | 'desc'
+type Placement = 'before' | 'after'
+
+interface PaginateParams<S extends string = string> {
+  sort: MaybeArray<S>
+  order: SortOrder
+  page: number
+}
+
+interface CursorPaginateParams<S extends string = string> {
+  sort: MaybeArray<S>
+  order: SortOrder
+  cursor: string | null
+}
+
+type MethodOf<T> = { [K in keyof T]: T[K] extends Closure ? K : never }[keyof T]
+
+interface PaginatorResource<T> {
+  data: T[]
+  links: {
+    next: string | null
+  }
+  meta: {
+    current_page: number
+  }
+}
+
+interface CursorPaginatorResource<T> {
+  data: T[]
+  meta: {
+    path: string
+    per_page: number
+    next_cursor: string | null
+    prev_cursor: string | null
+  }
+}
+
+type EditSongFormTabName = 'details' | 'lyrics' | 'visibility'
+
+interface ToastMessage {
+  id: string
+  type: 'info' | 'success' | 'warning' | 'danger'
+  content: string
+  timeout: number // seconds
+}
+
+interface Genre {
+  type: 'genres'
+  id: string
+  name: string
+  song_count: number
+  length: number
+}
+
+type SideSheetTab = 'Lyrics' | 'Artist' | 'Album' | 'YouTube'
+
+interface Visualizer {
+  init: (container: HTMLElement) => Promise<Closure>
+  id: string
+  name: string
+  credits?: {
+    author: string
+    url: string
+  }
+}
+
+type PlayableListColumnName =
+  | 'title'
+  | 'album'
+  | 'artist'
+  | 'track'
+  | 'duration'
+  | 'created_at'
+  | 'play_count'
+  | 'rating'
+  | 'favorite'
+  | 'year'
+  | 'genre'
+  | 'playlist_collaborator'
+  | 'playlist_added_at'
+
+type AlbumTableColumnName = 'name' | 'artist' | 'time' | 'year' | 'rating' | 'favorite'
+
+type ArtistTableColumnName = 'name' | 'rating' | 'favorite'
+
+interface Folder {
+  type: 'folders'
+  id: string
+  parent_id: string | null
+  name: string
+  is_uploads: boolean
+}
+
+interface MediaRow {
+  item: Folder | Song
+  selected: boolean
+}
+
+type MediaReference = Pick<Folder, 'type' | 'id'> | Pick<Song, 'type' | 'id'>
+
+interface LiveEvent {
+  type: 'live-events'
+  id: string
+  name: string
+  dates: {
+    start: string
+    end: string | null
+  }
+  url: string
+  image: string
+  venue: {
+    name: string
+    url: string
+    city: string
+  }
+}
+
+interface EmbedLayout {
+  id: string
+  name: string
+}
+
+interface EmbedOptions {
+  theme: Theme['id']
+  layout: EmbedLayout['id']
+  preview: boolean
+}
+
+interface LrcLine {
+  time: number
+  text: string
+}
+
+interface AiChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  error: boolean
+}
+
+interface AiResponse {
+  message: string
+  action:
+    | 'play_songs'
+    | 'suggest_songs'
+    | 'create_smart_playlist'
+    | 'add_radio_station'
+    | 'play_radio_station'
+    | 'add_to_favorites'
+    | 'remove_from_favorites'
+    | 'add_to_playlist'
+    | 'remove_from_playlist'
+    | 'show_lyrics'
+    | 'update_lyrics'
+    | 'update_album'
+    | 'update_artist'
+    | null
+  conversation_id: string | null
+  data: {
+    type?: 'playable' | 'album' | 'artist' | 'radio-station' | 'podcast'
+    songs?: Song[]
+    queue?: boolean
+    albums?: Album[]
+    artists?: Artist[]
+    stations?: RadioStation[]
+    podcasts?: Podcast[]
+    playlist?: Playlist
+    station?: RadioStation
+    song?: Song
+    album?: Album
+    artist?: Artist
+    lyrics?: string
+    list?: string
+  }
+}

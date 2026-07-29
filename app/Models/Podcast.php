@@ -1,0 +1,94 @@
+<?php
+
+namespace App\Models;
+
+use App\Builders\PodcastBuilder;
+use App\Casts\Podcast\CategoriesCast;
+use App\Casts\Podcast\PodcastMetadataCast;
+use App\Models\Concerns\MorphsToFavorites;
+use App\Models\Concerns\MorphsToRatings;
+use App\Models\Contracts\Favoriteable;
+use App\Models\Contracts\Rateable;
+use App\Models\Song as Episode;
+use Carbon\Carbon;
+use Database\Factories\PodcastFactory;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Attributes\Unguarded;
+use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Laravel\Scout\Searchable;
+use PhanAn\Poddle\Values\CategoryCollection;
+use PhanAn\Poddle\Values\ChannelMetadata;
+
+/**
+ * @property string $id
+ * @property string $url
+ * @property string $title
+ * @property string $description
+ * @property CategoryCollection $categories
+ * @property ChannelMetadata $metadata
+ * @property string $image
+ * @property string $link
+ * @property Collection<User> $subscribers
+ * @property Collection<int, Episode> $episodes
+ * @property int $added_by
+ * @property Carbon $last_synced_at
+ * @property ?string $author
+ *
+ * @method static PodcastFactory factory(...$parameters)
+ */
+#[UseEloquentBuilder(PodcastBuilder::class)]
+#[Unguarded]
+#[Hidden(['created_at', 'updated_at'])]
+class Podcast extends Model implements Favoriteable, Rateable
+{
+    use HasFactory;
+    use HasUuids;
+    use MorphsToFavorites;
+    use MorphsToRatings;
+    use Searchable;
+
+    protected function casts(): array
+    {
+        return [
+            'categories' => CategoriesCast::class,
+            'metadata' => PodcastMetadataCast::class,
+            'last_synced_at' => 'datetime',
+            'explicit' => 'boolean',
+            'favorite' => 'boolean',
+        ];
+    }
+
+    public static function query(): PodcastBuilder
+    {
+        /** @var PodcastBuilder */
+        return parent::query()->addSelect('podcasts.*');
+    }
+
+    public function episodes(): HasMany
+    {
+        return $this->hasMany(Episode::class)->orderByDesc('created_at');
+    }
+
+    public function subscribers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class)->using(PodcastUserPivot::class)->withPivot('state')->withTimestamps();
+    }
+
+    /** @return array<mixed> */
+    public function toSearchableArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'url' => $this->url,
+            'title' => $this->title,
+            'description' => $this->description,
+            'author' => $this->metadata->author,
+        ];
+    }
+}

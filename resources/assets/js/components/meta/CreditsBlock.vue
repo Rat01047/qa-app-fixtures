@@ -1,0 +1,45 @@
+<template>
+  <div class="scroll-mask-y max-h-36 overflow-auto" data-testid="demo-credits">
+    Music by
+    <ul class="inline">
+      <li v-for="credit in credits" :key="credit.name" class="inline">
+        <a :href="credit.url" target="_blank">{{ credit.name }}</a>
+      </li>
+    </ul>
+  </div>
+</template>
+
+<script lang="ts" setup>
+import { orderBy } from 'lodash-es'
+import { onMounted, ref } from 'vue'
+import { http } from '@/services/http'
+
+interface DemoCredits {
+  name: string
+  url: string
+}
+
+const credits = ref<DemoCredits[]>([])
+
+onMounted(async () => {
+  credits.value = window.KOEL.is_demo ? orderBy(await http.get<DemoCredits[]>('demo/credits'), 'name') : []
+})
+</script>
+
+<style lang="postcss" scoped>
+li&:last-child {
+  &::before {
+    content: ', and ';
+  }
+
+  &::after {
+    content: '.';
+  }
+}
+
+li + li {
+  &::before {
+    content: ', ';
+  }
+}
+</style>

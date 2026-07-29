@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022", "es2023.array", "dom", "dom.iterable"],
+    "jsx": "preserve",
+    "strict": true,
+    "noImplicitAny": false,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "experimentalDecorators": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "paths": {
+      "@/*": ["./js/*"]
+    }
+  },
+  "include": ["js/**/*", "../../node_modules/vitest/globals.d.ts"],
+  "exclude": []
+}

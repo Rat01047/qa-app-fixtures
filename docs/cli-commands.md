@@ -1,0 +1,330 @@
+---
+outline: [2, 3]
+description: Reference for all Koel artisan CLI commands including scanning, syncing, pruning, search indexing, and storage setup.
+---
+
+# CLI Commands
+
+Koel comes with a set of handy CLI commands to help you manage your installation.
+These commands are available via Laravel’s `artisan` command line interface.
+
+::: tip Standalone Binary users
+If you installed Koel via the [Standalone Binary](/guide/standalone-binary), replace `php artisan` with
+`./artisan` (run from the bundle directory) in every command below. `./artisan` is a thin shortcut for
+`./koel php-cli artisan` that re-execs the launcher so the bundle's PHP runtime stays in scope.
+Otherwise the commands below are identical.
+:::
+
+You can run `php artisan list` from your Koel installation directory and pipe the output to `grep` to filter out those under the `koel` namespace:
+
+```bash
+php artisan list | grep koel
+ koel
+  koel:admin:change-password  Change a user's password
+  koel:doctor                 Check Koel setup
+  koel:init                   Install or upgrade Koel
+  koel:license:activate       Activate a Koel Plus license
+  koel:license:deactivate     Deactivate the currently active Koel Plus license
+  koel:license:status         Check the current Koel Plus license status
+  koel:podcasts:sync          Synchronize podcasts.
+  koel:prune                  Remove empty artists and albums
+  ...
+```
+
+In order to get help on a specific command, run `php artisan <command> -h`.
+
+## Available Commands
+
+:::warning Warning
+Always run commands as your web server user (e.g. `www-data` or `nginx`), **never** as `root`.
+Otherwise, Koel might encounter issues with file permissions (e.g. with cache and storage files) and you might end up with a broken installation.
+
+With the Docker installation, for example, run the command as the `www-data` user:
+
+```bash
+docker exec --user www-data <container_name_for_koel> php artisan <command>
+```
+:::
+
+### `koel:admin:change-password`
+
+Change a user's password.
+
+#### Usage
+
+```bash
+php artisan koel:admin:change-password [<email>]
+```
+
+#### Arguments
+| Name    | Description                                                  |
+|---------|--------------------------------------------------------------|
+| `email` | The user's email. If empty, will get the default admin user. |
+
+### `koel:admin:set-user-role`
+
+Set a user's role.
+
+#### Usage
+
+```bash
+php artisan koel:admin:set-user-role <email>
+```
+
+#### Arguments
+| Name    | Description       |
+|---------|-------------------|
+| `email` | The user's email. |
+
+### `koel:clean-up-temp-files`
+
+Remove temporary files older than a certain age. Examples of temporary files include temporarily downloaded files,
+transcoded files, and so on.
+
+#### Usage
+
+```bash
+php artisan koel:clean-up-temp-files
+```
+
+#### Options
+| Name     | Description                                                                   |
+|----------|-------------------------------------------------------------------------------|
+| `--age=` | The age of temporary files to remove in minutes. Defaults to 1440 (one day).  |
+
+### `koel:doctor`
+
+Check Koel setup.
+
+#### Usage
+
+```bash
+php artisan koel:doctor
+```
+
+### `koel:extract-folders`
+
+Extract the folder structure from the existing song paths and store it in the database.
+This command needs to be run only once. Subsequent scans will take care of this functionality automatically.
+
+#### Usage
+
+```bash
+php artisan koel:extract-folders
+```
+
+### `koel:fetch-artwork`
+
+Attempt to fetch missing album covers and artist images from the available sources (Spotify, Last.fm, and MusicBrainz).
+You'll need to configure and enable the corresponding [3rd-party integrations](./service-integrations.md) for this
+command to work.
+
+To avoid hitting rate limits, Koel pauses between requests. By default, this delay is 1 second, but you can customize it
+with the `--delay` option.
+
+#### Usage
+
+```bash
+php artisan koel:fetch-artwork
+# Or with a custom delay (in seconds) between requests:
+php artisan koel:fetch-artwork --delay=2
+```
+
+### `koel:init`
+
+Install or upgrade Koel.
+
+Usage
+
+```bash
+php artisan koel:init [options]
+```
+
+
+#### Options
+| Name             | Description                     |
+|------------------|---------------------------------|
+| `--no-assets`    | Do not compile front-end assets |
+| `--no-scheduler` | Do not install scheduler        |
+
+:::tip
+Instead of running `php artisan koel:init` directly, you should run `composer koel:init`, which calls this command
+under the hood after installing dependencies. To pass options to `php artisan koel:init`, use argument forwarding, e.g.,
+`composer koel:init -- --no-assets`.
+:::
+
+### `koel:license:activate`
+
+Activate a Koel Plus license.
+
+#### Usage
+
+```bash
+php artisan koel:license:activate <key>
+```
+
+#### Arguments
+
+| Name  | Description                  |
+|-------|------------------------------|
+| `key` | The license key to activate. |
+
+### `koel:license:deactivate`
+
+Deactivate the currently active Koel Plus license.
+
+#### Usage
+
+```bash
+php artisan koel:license:deactivate
+```
+
+### `koel:license:status`
+
+Check the current Koel Plus license status.
+
+#### Usage
+
+```bash
+php artisan koel:license:status
+```
+
+### `koel:podcasts:sync`
+
+Synchronize podcasts.
+
+#### Usage
+
+```bash
+php artisan koel:podcasts:sync
+```
+
+### `koel:prune`
+
+Remove empty artists and albums.
+
+#### Usage
+
+```bash
+php artisan koel:prune
+```
+
+### `koel:scan`
+
+Scan for songs in the configured directory.
+
+#### Usage
+
+```bash
+php artisan koel:scan [options]
+php artisan koel:sync [options] # Alias, deprecated
+```
+
+#### Options:
+
+| Name             | Description                                                                                                                                                                   |
+|------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `O`, `--owner=`  | The ID of the user who should own the newly scanned songs. Defaults to the first admin user.                                                                                  |
+| `P`, `--private` | Whether to make the newly scanned songs private to the user.                                                                                                                  |
+| `I`, `--ignore=` | The comma-separated tags to ignore (exclude) from scanning. Valid tags are `title`, `album`,`artist`, `albumartist`, `track`, `disc`, `year`, `genre`, `lyrics`, and `cover`. |
+| `F`, `--force`   | Force re-scanning even unchanged files.                                                                                                                                       |
+
+### `koel:scheduler:install`
+
+Install the command scheduler. Refer to [Command Scheduling](#command-scheduling) for more information.
+
+### `koel:search:import`
+
+Import all searchable entities with Scout. Refer to [Instant Search](./usage/search) for more information.
+
+#### Usage
+
+```bash
+php artisan koel:search:import
+```
+
+### `koel:storage`
+
+Set up and configure Koel’s storage.
+
+#### Usage
+
+```bash
+php artisan koel:storage
+```
+
+### `koel:storage:dropbox` <PlusBadge />
+
+Set up Dropbox as the storage driver for Koel.
+
+#### Usage
+
+```bash
+php artisan koel:storage:dropbox
+```
+
+### `koel:storage:local`
+
+Set up the local storage for Koel. A "local storage" is simply a directory on the server where Koel is installed.
+
+#### Usage
+
+```bash
+php artisan koel:storage:local
+```
+
+### `koel:storage:s3` <PlusBadge />
+
+Set up Amazon S3 or a compatible service (DigitalOcean Spaces, Cloudflare R2, etc.) as the storage driver for Koel.
+
+#### Usage
+
+```bash
+php artisan koel:storage:s3
+```
+
+### `koel:storage:webdav` <PlusBadge />
+
+Set up WebDAV (NextCloud, ownCloud, or a plain WebDAV server) as the storage driver for Koel.
+
+#### Usage
+
+```bash
+php artisan koel:storage:webdav
+```
+
+:::tip
+To set up the storage driver for Koel, simply use `koel:storage`. Internally, it calls `koel:storage:local`, `koel:storage:s3`, `koel:storage:dropbox`, or `koel:storage:webdav` based on your input.
+:::
+
+### `koel:tags:collect`
+
+Collect additional tags from existing songs. This is a legacy command and is no longer needed for new installations.
+
+#### Usage
+
+```bash
+php artisan koel:tags:collect
+```
+
+## Command Scheduling
+
+Some commands, such as `koel:scan`, `koel:prune`, and `koel:clean-up-temp-files` can be scheduled to run at regular intervals.
+Instead of setting up individual cron jobs, you can use Koel’s built-in scheduler to handle them automatically.
+
+Every install method sets the scheduler up for you, so most users have nothing more to do. `koel:init` runs `koel:scheduler:install` for the pre-compiled archive and build-from-source paths; the [Standalone Binary](/guide/standalone-binary) launcher writes its own cron entry on every `./koel php-server` start.
+
+If you ran `koel:init` with `--no-scheduler` and want to install it on its own, run as the web server user (e.g. `www-data` or `nginx`):
+
+```bash
+php artisan koel:scheduler:install
+```
+
+If you'd rather edit the crontab directly (for example, with `sudo crontab -u www-data -e`), add this line:
+
+```bash
+* * * * * cd /path-to-koel-installation && php artisan schedule:run >> /dev/null 2>&1
+```
+
+Either way, the scheduler runs every minute and executes any scheduled commands as needed.
+By default, `koel:scan`, `koel:prune`, and `koel:podcasts:sync` run every day at midnight.

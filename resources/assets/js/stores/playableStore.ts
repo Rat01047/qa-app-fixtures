@@ -1,0 +1,464 @@
+import isMobile from 'ismobilejs'
+import { differenceBy, orderBy, unionBy, uniqBy } from 'lodash-es'
+import { Reactive, reactive, watch } from 'vue'
+import { arrayify, flattenParams, moveItemsInList, use } from '@/utils/helpers'
+import { isSong } from '@/utils/typeGuards'
+import { logger } from '@/utils/logger'
+import { sha256 } from '@/utils/crypto'
+import { normalizeForComparison, secondsToHumanReadable } from '@/utils/formatters'
+import { authService } from '@/services/authService'
+import { cache } from '@/services/cache'
+import { http } from '@/services/http'
+import { useVault } from '@/composables/useVault'
+import { preferenceStore } from '@/stores/preferenceStore'
+import { commonStore } from '@/stores/commonStore'
+import { albumStore } from '@/stores/albumStore'
+import { artistStore } from '@/stores/artistStore'
+import { overviewStore } from '@/stores/overviewStore'
+import { playlistStore } from '@/stores/playlistStore'
+
+export interface SongUpdateData {
+  title?: string
+  artist_name?: string
+  album_name?: string
+  album_artist_name?: string
+  track?: number | null
+  disc?: number | null
+  lyrics?: string
+  year?: number | null
+  genre?: string
+  visibility?: 'public' | 'private' | 'unchanged'
+}
+
+export interface SongUpdateResult {
+  songs: Song[]
+  artists: Artist[]
+  albums: Album[]
+  removed: {
+    album_ids: Album['id'][]
+    artist_ids: Artist['id'][]
+  }
+}
+
+export type SongListPaginateParams = PaginateParams<PlayableListSortField>
+export type SongListCursorPaginateParams = CursorPaginateParams<PlayableListSortField>
+
+const watchPlayCount = (playable: Playable) => {
+  watch(
+    () => playable.play_count,
+    () => overviewStore.refreshPlayStats(),
+  )
+}
+
+export const playableStore = {
+  ...useVault<Playable>({
+    onItemAdded: playable => {
+      playable.playback_state = 'Stopped'
+      watchPlayCount(playable)
+    },
+  }),
+
+  state: reactive<{ playables: Playable[]; favorites: Playable[] }>({
+    playables: [],
+    favorites: [],
+  }),
+
+  getFormattedLength: (playables: MaybeArray<Playable>) =>
+    secondsToHumanReadable(arrayify(playables).reduce((total, p) => total + p.length, 0)),
+
+  findPlaying() {
+    for (const playable of this.vault.values()) {
+      if (playable.playback_state !== 'Stopped') {
+        return playable
+      }
+    }
+
+    return undefined
+  },
+
+  byId(id: Playable['id']) {
+    const playable = this.vault.get(id)
+
+    if (!playable) {
+      return undefined
+    }
+
+    if (isSong(playable) && playable.deleted) {
+      return undefined
+    }
+
+    return playable
+  },
+
+  byIds<T extends Playable = Playable>(ids: T['id'][]) {
+    const playables: Playable[] = []
+    ids.forEach(id => use(this.byId(id), song => playables.push(song!)))
+    return playables as T[]
+  },
+
+  byAlbum(album: Album) {
+    return Array.from(this.vault.values()).filter(
+      playable => isSong(playable) && playable.album_id === album.id,
+    ) as Song[]
+  },
+
+  syncAlbumProperties(album: Album) {
+    this.byAlbum(album).forEach(a => {
+      a.album_cover = album.cover
+      a.album_name = album.name
+    })
+  },
+
+  byArtist(artist: Artist) {
+    return Array.from(this.vault.values()).filter(
+      playable => isSong(playable) && playable.artist_id === artist.id,
+    ) as Song[]
+  },
+
+  byAlbumArtist(artist: Artist) {
+    return Array.from(this.vault.values()).filter(
+      playable => isSong(playable) && playable.album_artist_id === artist.id,
+    ) as Song[]
+  },
+
+  syncArtistProperties(artist: Artist) {
+    this.byArtist(artist).forEach(a => {
+      a.artist_name = artist.name
+    })
+
+    this.byAlbumArtist(artist).forEach(a => {
+      a.album_artist_name = artist.name
+    })
+  },
+
+  async resolve(id: Playable['id']) {
+    let playable = this.byId(id)
+
+    if (!playable) {
+      try {
+        playable = this.syncWithVault(await http.get<Playable>(`songs/${id}`))[0]
+      } catch (error: unknown) {
+        logger.error(error)
+      }
+    }
+
+    return playable
+  },
+
+  matchSongsByTitle: (title: string, songs: Song[]) => {
+    const normalizedTitle = normalizeForComparison(title)
+    return songs.find(song => normalizeForComparison(song.title) === normalizedTitle) ?? null
+  },
+
+  /**
+   * Increase the play count for a playable.
+   */
+  registerPlay: async (playable: Playable) => {
+    const interaction = await http.silently.post<Interaction>('interaction/play', { song: playable.id })
+
+    // Use the data from the server to make sure we don't miss a play from another device.
+    playable.play_count = interaction.play_count
+  },
+
+  scrobble: async (song: Song) => {
+    if (!isSong(song)) {
+      throw new Error('Scrobble is only supported for songs.')
+    }
+
+    return await http.silently.post(`songs/${song.id}/scrobble`, {
+      timestamp: song.play_start_time,
+    })
+  },
+
+  async updateSongs(songsToUpdate: Song[], data: SongUpdateData) {
+    if (songsToUpdate.some(song => !isSong(song))) {
+      throw new Error('Only songs can be updated.')
+    }
+
+    const result = await http.put<SongUpdateResult>('songs', {
+      data,
+      songs: songsToUpdate.map(song => song.id),
+    })
+
+    this.syncWithVault(result.songs)
+
+    albumStore.syncWithVault(result.albums)
+    artistStore.syncWithVault(result.artists)
+
+    albumStore.removeByIds(result.removed.album_ids)
+    artistStore.removeByIds(result.removed.artist_ids)
+
+    return result
+  },
+
+  getSourceUrl: (playable: Playable) => {
+    return isMobile.any && preferenceStore.transcode_on_mobile
+      ? `${commonStore.state.cdn_url}play/${playable.id}/1?t=${authService.getAudioToken()}`
+      : `${commonStore.state.cdn_url}play/${playable.id}?t=${authService.getAudioToken()}`
+  },
+
+  getShareableUrl: (song: Playable) => `${window.KOEL.base_url}#/songs/${song.id}`,
+
+  ensureNotDeleted: (songs: MaybeArray<Song>) => arrayify(songs).filter(({ deleted }) => !deleted),
+
+  async fetchSongsForAlbum(album: Album | Album['id']) {
+    const id = typeof album === 'string' ? album : album.id
+
+    return this.ensureNotDeleted(
+      (await cache.remember([`album.songs`, id], async () =>
+        this.syncWithVault(await http.get<Song[]>(`albums/${id}/songs`)),
+      )) as Song[],
+    )
+  },
+
+  invalidateAlbumAndArtistSongCaches(song: Song) {
+    cache.remove(['album.songs', song.album_id])
+    cache.remove(['artist.songs', song.artist_id])
+  },
+
+  async fetchSongsForArtist(artist: Artist | Artist['id']) {
+    const id = typeof artist === 'string' ? artist : artist.id
+
+    return this.ensureNotDeleted(
+      (await cache.remember([`artist.songs`, id], async () =>
+        this.syncWithVault(await http.get<Song[]>(`artists/${id}/songs`)),
+      )) as Song[],
+    )
+  },
+
+  async fetchForPlaylist(playlist: Playlist | Playlist['id'], refresh = false) {
+    const id = typeof playlist === 'string' ? playlist : playlist.id
+
+    if (refresh) {
+      cache.remove(['playlist.songs', id])
+    }
+
+    const songs = this.ensureNotDeleted(
+      (await cache.remember([`playlist.songs`, id], async () =>
+        this.syncWithVault(await http.get<Song[]>(`playlists/${id}/songs`)),
+      )) as Song[],
+    )
+
+    playlistStore.byId(id)!.playables = songs
+
+    return songs
+  },
+
+  async fetchForPlaylists(playlists: Playlist[]) {
+    const playables: Playable[] = []
+
+    for await (const playlist of playlists) {
+      playables.push(...(await this.fetchForPlaylist(playlist)))
+    }
+
+    return uniqBy(playables, 'id')
+  },
+
+  async fetchEpisodesInPodcast(podcast: Podcast | Podcast['id'], refresh = false) {
+    const id = typeof podcast === 'string' ? podcast : podcast.id
+
+    if (refresh) {
+      cache.remove(['podcast.episodes', id])
+    }
+
+    return await cache.remember(
+      [`podcast.episodes`, id],
+      async () =>
+        this.syncWithVault(
+          await http.get<Episode[]>(`podcasts/${id}/episodes${refresh ? '?refresh=true' : ''}`),
+        ) as Episode[],
+    )
+  },
+
+  async paginateSongsByGenre(genre: Genre | Genre['id'], params: SongListCursorPaginateParams) {
+    const id = typeof genre === 'string' ? genre : genre.id
+
+    const query = new URLSearchParams(flattenParams(params))
+    query.set('cursor', params.cursor ?? '')
+
+    const resource = await http.get<CursorPaginatorResource<Song>>(`genres/${id}/songs?${query}`)
+
+    const songs = this.syncWithVault(resource.data) as Song[]
+
+    return {
+      songs,
+      nextCursor: resource.meta.next_cursor,
+    }
+  },
+
+  async fetchSongsByGenre(genre: Genre | Genre['id'], random = false, limit = 500) {
+    const id = typeof genre === 'string' ? genre : genre.id
+
+    const params = new URLSearchParams({
+      limit: String(limit),
+      random: String(random),
+    }).toString()
+
+    return this.syncWithVault(await http.get<Song[]>(`genres/${id}/songs/queue?${params}`))
+  },
+
+  async paginateSongs(params: SongListCursorPaginateParams) {
+    const query = new URLSearchParams(flattenParams(params))
+    query.set('cursor', params.cursor ?? '')
+
+    const resource = await http.get<CursorPaginatorResource<Playable>>(`songs?${query}`)
+    this.state.playables = unionBy(this.state.playables, this.syncWithVault(resource.data), 'id')
+
+    return resource.meta.next_cursor
+  },
+
+  getMostPlayedSongs(count: number) {
+    return orderBy(
+      Array.from(this.vault.values()).filter(
+        playable => isSong(playable) && !playable.deleted && playable.play_count > 0,
+      ),
+      'play_count',
+      'desc',
+    ).slice(0, count) as Song[]
+  },
+
+  async deleteSongsFromFilesystem(songs: Song[]) {
+    const ids = songs.map(song => {
+      // Whenever a vault sync is requested (e.g., upon playlist/album/artist fetching)
+      // songs marked as "deleted" will be excluded.
+      song.deleted = true
+      return song.id
+    })
+
+    await http.delete('songs', { songs: ids })
+  },
+
+  async publicizeSongs(songs: Song[]) {
+    if (songs.some(song => !isSong(song))) {
+      throw new Error('This action is only supported for songs.')
+    }
+
+    await http.put('songs/publicize', {
+      songs: songs.map(song => song.id),
+    })
+
+    songs.forEach(song => (song.is_public = true))
+  },
+
+  async privatizeSongs(songs: Song[]) {
+    if (songs.some(song => !isSong(song))) {
+      throw new Error('This action is only supported for songs.')
+    }
+
+    const privatizedIds = await http.put<Song['id'][]>('songs/privatize', {
+      songs: songs.map(({ id }) => id),
+    })
+
+    privatizedIds.forEach(id => {
+      const song = this.byId(id) as Song
+      song && (song.is_public = false)
+    })
+
+    return privatizedIds
+  },
+
+  async resolveSongsFromMediaReferences(data: MediaReference[], shuffle = false) {
+    const songReferences = data.filter(item => item.type === 'songs') as Array<Pick<Song, 'type' | 'id'>>
+    const songs = this.byIds(songReferences.map(item => item.id)) as Song[]
+
+    const folderReferences = data.filter(item => item.type === 'folders') as Array<Pick<Folder, 'type' | 'id'>>
+
+    if (!folderReferences.length) {
+      return songs
+    }
+
+    const folders = folderReferences.map(item => item.id).sort()
+
+    const cacheKey = ['folders', await sha256(JSON.stringify(folders))]
+
+    const fetcher = () => http.post<Song[]>(`songs/by-folders?shuffle=${shuffle}`, { folders })
+
+    const songsFromFolders = this.syncWithVault(
+      shuffle ? await fetcher() : await cache.remember(cacheKey, async () => await fetcher()),
+    )
+
+    return unionBy(songs, songsFromFolders as Song[], 'id')
+  },
+
+  async fetchSongsInFolder(folderId: Folder['id'] | null) {
+    const query = folderId ? `?folder=${folderId}` : ''
+    return this.syncWithVault(await http.get<Song[]>(`songs/in-folder${query}`))
+  },
+
+  async fetchFavorites() {
+    this.state.favorites = this.syncWithVault(await http.get<Playable[]>('songs/favorite'))
+    return this.state.favorites
+  },
+
+  async toggleFavorite(playable: Reactive<Playable>) {
+    // Don't wait for the HTTP response to update the status, just toggle right away.
+    // We'll update the liked status again after the HTTP request.
+    playable.favorite = !playable.favorite
+
+    const favorite = await http.post<Favorite | null>(`favorites/toggle`, {
+      type: 'playable',
+      id: playable.id,
+    })
+
+    playable.favorite = Boolean(favorite)
+
+    this.state.favorites = playable.favorite
+      ? unionBy(this.state.favorites, arrayify(playable), 'id')
+      : differenceBy(this.state.favorites, arrayify(playable), 'id')
+  },
+
+  async rate(song: Reactive<Song>, rating: number) {
+    const previous = song.rating
+    song.rating = rating
+
+    try {
+      const updated = await http.put<Song>(`songs/${song.id}/rating`, { rating })
+      song.rating = updated.rating
+    } catch (e) {
+      song.rating = previous
+      throw e
+    }
+  },
+
+  async favorite(playables: MaybeArray<Playable>) {
+    playables = arrayify(playables)
+    playables.forEach(playable => (playable.favorite = true))
+
+    await http.post('favorites', {
+      type: 'playable',
+      ids: playables.map(playable => playable.id),
+    })
+
+    this.state.favorites = unionBy(this.state.favorites, playables, 'id')
+  },
+
+  async undoFavorite(playables: MaybeArray<Playable>) {
+    playables = arrayify(playables)
+    playables.forEach(playable => (playable.favorite = true))
+
+    await http.delete('favorites', {
+      type: 'playable',
+      ids: playables.map(playable => playable.id),
+    })
+
+    this.state.favorites = differenceBy(this.state.favorites, playables, 'id')
+  },
+
+  async moveFavoritesInList(playables: MaybeArray<Playable>, target: Playable, placement: Placement) {
+    const orderHash = JSON.stringify(this.state.favorites.map(({ id }) => id))
+
+    this.state.favorites.splice(
+      0,
+      this.state.favorites.length,
+      ...moveItemsInList(this.state.favorites, playables, target, placement),
+    )
+
+    if (orderHash !== JSON.stringify(this.state.favorites.map(({ id }) => id))) {
+      await http.silently.post('favorites/move', {
+        placement,
+        songs: arrayify(playables).map(({ id }) => id),
+        target: target.id,
+      })
+    }
+  },
+}

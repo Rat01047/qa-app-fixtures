@@ -1,0 +1,41 @@
+<?php
+
+namespace Tests\Feature\KoelPlus\MediaBrowser;
+
+use App\Http\Resources\SongFileResource;
+use App\Models\Folder;
+use App\Models\Song;
+use Illuminate\Database\Eloquent\Collection;
+use PHPUnit\Framework\Attributes\Test;
+use Tests\PlusTestCase;
+
+class PaginateFolderSongsTest extends PlusTestCase
+{
+    #[Test]
+    public function paginate(): void
+    {
+        $folder = Folder::factory()->createOne(['path' => 'foo/bar']);
+
+        /** @var Collection<Song> $songs */
+        $songs = Song::factory()->for($folder)->createMany(2);
+
+        $response = $this->getAs(
+            '/api/browse/songs?folder=' . $folder->id . '&cursor=',
+        )->assertJsonStructure(SongFileResource::CURSOR_PAGINATION_JSON_STRUCTURE);
+
+        self::assertEqualsCanonicalizing($songs->pluck('id')->all(), $response->json('data.*.id'));
+    }
+
+    #[Test]
+    public function paginateRootMediaFolder(): void
+    {
+        /** @var Collection<Song> $songs */
+        $songs = Song::factory()->createMany(2);
+
+        $response = $this->getAs(
+            '/api/browse/songs?cursor=',
+        )->assertJsonStructure(SongFileResource::CURSOR_PAGINATION_JSON_STRUCTURE);
+
+        self::assertEqualsCanonicalizing($songs->pluck('id')->all(), $response->json('data.*.id'));
+    }
+}

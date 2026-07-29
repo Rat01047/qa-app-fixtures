@@ -1,0 +1,52 @@
+<?php
+
+namespace App\Models;
+
+use App\Casts\EncryptedValueCast;
+use App\Casts\LicenseInstanceCast;
+use App\Casts\LicenseMetaCast;
+use App\Values\License\LicenseInstance;
+use App\Values\License\LicenseMeta;
+use Carbon\Carbon;
+use Database\Factories\LicenseFactory;
+use Illuminate\Database\Eloquent\Attributes\Guarded;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
+
+/**
+ * @property-read string $short_key
+ * @property string $key
+ * @property LicenseInstance $instance An activation of the license.
+ * @see https://docs.lemonsqueezy.com/api/license-key-instances
+ * @property LicenseMeta $meta
+ * @property-read Carbon $activated_at
+ *
+ * @method static LicenseFactory factory(...$parameters)
+ */
+#[Guarded(['id'])]
+class License extends Model
+{
+    use HasFactory;
+
+    protected function casts(): array
+    {
+        return [
+            'key' => EncryptedValueCast::class,
+            'instance' => LicenseInstanceCast::class,
+            'meta' => LicenseMetaCast::class,
+            'expires_at' => 'datetime',
+        ];
+    }
+
+    protected function shortKey(): Attribute
+    {
+        return Attribute::get(fn (): string => '****-' . Str::afterLast($this->key, '-'))->shouldCache();
+    }
+
+    protected function activatedAt(): Attribute
+    {
+        return Attribute::get(fn () => $this->instance->createdAt)->shouldCache();
+    }
+}

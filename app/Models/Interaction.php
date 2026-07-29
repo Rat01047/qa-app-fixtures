@@ -1,0 +1,45 @@
+<?php
+
+namespace App\Models;
+
+use Database\Factories\InteractionFactory;
+use Illuminate\Database\Eloquent\Attributes\Guarded;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
+
+/**
+ * @property int $play_count
+ * @property Song $song
+ * @property User $user
+ * @property int $id
+ * @property string $song_id
+ * @property Carbon|string $last_played_at
+ *
+ * @method static InteractionFactory factory(...$parameters)
+ */
+#[Guarded(['id'])]
+#[Hidden(['id', 'user_id', 'created_at', 'updated_at', 'last_played_at'])]
+class Interaction extends Model
+{
+    use HasFactory;
+
+    protected function casts(): array
+    {
+        return [
+            'play_count' => 'integer',
+        ];
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function song(): BelongsTo
+    {
+        return $this->belongsTo(Song::class);
+    }
+}

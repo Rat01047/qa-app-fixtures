@@ -1,0 +1,85 @@
+import { reactive } from 'vue'
+import { differenceBy } from 'lodash-es'
+import { http } from '@/services/http'
+import { useVault } from '@/composables/useVault'
+
+type UserFormData = Pick<User, 'name' | 'email' | 'role'>
+
+export interface CreateUserData extends UserFormData {
+  password: string
+}
+
+export interface UpdateUserData extends UserFormData {
+  password?: string
+}
+
+export const userStore = {
+  ...useVault<User>(),
+
+  state: reactive({
+    users: [] as User[],
+    current: null! as CurrentUser,
+  }),
+
+  init(currentUser: CurrentUser) {
+    this.state.users = this.syncWithVault(currentUser)
+    this.state.current = this.state.users[0] as CurrentUser
+  },
+
+  async fetch() {
+    this.state.users = this.syncWithVault(await http.get<User[]>('users'))
+  },
+
+  get current() {
+    return this.state.current as CurrentUser
+  },
+
+  async store(data: CreateUserData) {
+    const user = await http.post<User>('users', data)
+    this.add(user)
+    return this.byId(user.id)
+  },
+
+  add(user: MaybeArray<User>) {
+    this.state.users.push(...this.syncWithVault(user))
+  },
+
+  async update(user: User, data: UpdateUserData) {
+    this.syncWithVault(await http.put<User>(`users/${user.id}`, data))
+  },
+
+  async destroy(user: User) {
+    await http.delete(`users/${user.id}`)
+    this.remove(user)
+
+    // Mama, just killed a man
+    // Put a gun against his head
+    // Pulled my trigger, now he's dead
+    // Mama, life had just begun
+    // But now I've gone and thrown it all away
+    // Mama, oooh
+    // Didn't mean to make you cry
+    // If I'm not back again this time tomorrow
+    // Carry on, carry on, as if nothing really matters
+    //
+    // Too late, my time has come
+    // Sends shivers down my spine
+    // Body's aching all the time
+    // Goodbye everybody - I've got to go
+    // Gotta leave you all behind and face the truth
+    // Mama, oooh
+    // I don't want to die
+    // I sometimes wish I'd never been born at all
+  },
+
+  remove(user: User) {
+    this.state.users = differenceBy(this.state.users, [user], 'id')
+    this.vault.delete(user.id)
+  },
+
+  async regenerateSubsonicApiKey() {
+    const updated = await http.post<CurrentUser>('me/subsonic-api-key/regenerate')
+    this.state.current.subsonic_api_key = updated.subsonic_api_key
+    return updated.subsonic_api_key
+  },
+}

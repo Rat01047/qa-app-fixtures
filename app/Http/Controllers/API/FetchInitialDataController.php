@@ -1,0 +1,93 @@
+<?php
+
+namespace App\Http\Controllers\API;
+
+use App\Enums\Acl\Permission;
+use App\Facades\License;
+use App\Http\Controllers\Controller;
+use App\Http\Resources\PlaylistFolderResource;
+use App\Http\Resources\PlaylistResource;
+use App\Http\Resources\QueueStateResource;
+use App\Http\Resources\ThemeResource;
+use App\Http\Resources\UserResource;
+use App\Models\Setting;
+use App\Models\User;
+use App\Repositories\PlaylistRepository;
+use App\Repositories\SettingRepository;
+use App\Repositories\SongRepository;
+use App\Repositories\ThemeRepository;
+use App\Services\ApplicationInformationService;
+use App\Services\Integrations\ITunesService;
+use App\Services\Integrations\LastfmService;
+use App\Services\Integrations\MusicBrainzService;
+use App\Services\Integrations\SpotifyService;
+use App\Services\Integrations\TicketmasterService;
+use App\Services\Integrations\YouTubeService;
+use App\Services\License\Contracts\LicenseServiceInterface;
+use App\Services\MediaBrowser;
+use App\Services\QueueService;
+use Illuminate\Contracts\Auth\Authenticatable;
+
+class FetchInitialDataController extends Controller
+{
+    /** @param User $user */
+    public function __invoke(
+        ITunesService $iTunesService,
+        SettingRepository $settingRepository,
+        SongRepository $songRepository,
+        PlaylistRepository $playlistRepository,
+        ApplicationInformationService $applicationInformationService,
+        QueueService $queueService,
+        ThemeRepository $themeRepository,
+        LicenseServiceInterface $licenseService,
+        Authenticatable $user,
+    ) {
+        $licenseStatus = $licenseService->getStatus();
+        $theme = $licenseStatus->isValid()
+            ? $themeRepository->findUserThemeById($user->preferences->theme, $user)
+            : null;
+
+        return response()->json([
+            'settings' => $user->hasPermissionTo(Permission::MANAGE_SETTINGS)
+                ? $settingRepository->getAllAsKeyValueArray()
+                : [],
+            'playlists' => PlaylistResource::collection($playlistRepository->getAllAccessibleByUser($user)),
+            'playlist_folders' => PlaylistFolderResource::collection($user->playlistFolders),
+            'current_user' => UserResource::make($user),
+            'assignable_roles' => $user->getAssignableRoles()->toArray(),
+            'uses_musicbrainz' => MusicBrainzService::enabled(),
+            'uses_last_fm' => LastfmService::used(),
+            'uses_spotify' => SpotifyService::enabled(),
+            'uses_you_tube' => YouTubeService::enabled(),
+            'uses_i_tunes' => ITunesService::used(),
+            'uses_ticketmaster' => TicketmasterService::used(),
+            'allows_download' => config('koel.download.allow'),
+            'download_limit' => (int) config('koel.download.limit'),
+            'uses_media_browser' => MediaBrowser::used(),
+            'uses_ai' => License::isPlus() && config('koel.ai.enabled'),
+            'allows_embedding' => (bool) config('koel.embed.enabled'),
+            'supports_batch_downloading' => extension_loaded('zip'),
+            'media_path_set' => (bool) Setting::get('media_path'),
+            'supports_transcoding' =>
+                config('koel.streaming.ffmpeg_path') && is_executable(config('koel.streaming.ffmpeg_path')),
+            'cdn_url' => static_url(),
+            'current_version' => koel_version(),
+            'latest_version' => $user->hasPermissionTo(Permission::MANAGE_SETTINGS)
+                ? $applicationInformationService->getLatestVersionNumber()
+                : koel_version(),
+            'song_count' => $songRepository->countSongs(),
+            'song_length' => $songRepository->getTotalSongLength(),
+            'queue_state' => QueueStateResource::make($queueService->getQueueState($user)),
+            'koel_plus' => [
+                'active' => $licenseStatus->isValid(),
+                'short_key' => $licenseStatus->license?->short_key,
+                'customer_name' => $licenseStatus->license?->meta->customerName,
+                'customer_email' => $licenseStatus->license?->meta->customerEmail,
+                'product_id' => config('lemonsqueezy.product_id'),
+            ],
+            'storage_driver' => config('koel.storage_driver'),
+            'dir_separator' => DIRECTORY_SEPARATOR,
+            'current_theme' => $theme ? ThemeResource::make($theme) : null,
+        ]);
+    }
+}

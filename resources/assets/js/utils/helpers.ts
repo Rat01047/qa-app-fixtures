@@ -1,0 +1,164 @@
+import { isObject } from 'lodash-es'
+import type { AsyncComponentLoader, Component, DeepReadonly, InjectionKey } from 'vue'
+import {
+  defineAsyncComponent as baseDefineAsyncComponent,
+  inject,
+  isRef,
+  provide,
+  readonly,
+  shallowReadonly,
+} from 'vue'
+import type { ReadonlyInjectionKey } from '@/config/symbols'
+import { logger } from '@/utils/logger'
+import { sha256 } from '@/utils/crypto'
+import { isSong } from '@/utils/typeGuards'
+
+import LoadingComponent from '@/components/ui/Loading.vue'
+import ErrorComponent from '@/components/ui/AsyncComponentFallback.vue'
+
+export const use = <T>(value: T | undefined | null, cb: (arg: T) => void) => {
+  if (typeof value === 'undefined' || value === null) {
+    return
+  }
+
+  cb(value)
+}
+
+export const arrayify = <T>(maybeArray: MaybeArray<T>) => (Array.isArray(maybeArray) ? maybeArray : [maybeArray])
+
+// @ts-ignore
+export const noop = () => {}
+
+export const limitBy = <T>(arr: T[], count: number, offset: number = 0): T[] => arr.slice(offset, offset + count)
+
+export const provideReadonly = <T>(key: ReadonlyInjectionKey<T>, value: T, deep = true, mutator?: Closure) => {
+  mutator = mutator || (v => (isRef(value) ? (value.value = v) : (value = v)))
+
+  if (!isObject(value)) {
+    logger.warn(`value cannot be made readonly: ${value}`)
+    provide(key, [value, mutator])
+  } else {
+    provide(key, [
+      deep ? (readonly(value) as unknown as DeepReadonly<T>) : (shallowReadonly(value) as unknown as Readonly<T>),
+      mutator,
+    ])
+  }
+}
+
+export const requireInjection = <T>(key: InjectionKey<T>, defaultValue?: T) => {
+  const value = inject(key, defaultValue)
+
+  if (typeof value === 'undefined') {
+    throw new TypeError(`Missing injection: ${key.toString()}`)
+  }
+
+  return value
+}
+
+export const moveItemsInList = <T>(list: T[], items: T | T[], target: T, placement: Placement) => {
+  if (!list.includes(target)) {
+    throw new Error('Target not found in list')
+  }
+
+  const subset = arrayify(items)
+
+  const isTargetAdjacent =
+    placement === 'before'
+      ? list.indexOf(subset[subset.length - 1]) + 1 === list.indexOf(target)
+      : list.indexOf(subset[0]) - 1 === list.indexOf(target)
+
+  if (isTargetAdjacent) {
+    return list
+  }
+
+  const updatedList = list.filter(item => !subset.includes(item))
+  const targetIndex = updatedList.indexOf(target)
+  updatedList.splice(placement === 'before' ? targetIndex : targetIndex + 1, 0, ...subset)
+
+  return updatedList
+}
+
+export const gravatar = async (email: string, size = 192) => {
+  const hash = await sha256(email.trim().toLowerCase())
+  return `https://www.gravatar.com/avatar/${hash}?s=${size}&d=robohash`
+}
+
+export const openPopup = (url: string, name: string, width: number, height: number, parent: Window) => {
+  const y = parent.top!.outerHeight / 2 + parent.top!.screenY - height / 2
+  const x = parent.top!.outerWidth / 2 + parent.top!.screenX - width / 2
+  return parent.open(
+    url,
+    name,
+    `toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=no, resizable=no, copyhistory=no, width=${width}, height=${height}, top=${y}, left=${x}`,
+  )
+}
+/**
+ * Force reloading window regardless of "Confirm before reload" setting.
+ * This is handy for certain cases, for example Last.fm connect/disconnect.
+ */
+export const forceReloadWindow = (): void => {
+  if (window.RUNNING_UNIT_TESTS) {
+    return
+  }
+
+  window.onbeforeunload = noop
+  window.location.reload()
+}
+
+export const copyText = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch (error: unknown) {
+    logger.warn('Failed to copy text to clipboard using navigator.clipboard.writeText()', error)
+
+    let copyArea = document.querySelector<HTMLTextAreaElement>('#copyArea')
+
+    if (!copyArea) {
+      copyArea = document.createElement('textarea')
+      copyArea.id = 'copyArea'
+      document.body.appendChild(copyArea)
+    }
+
+    copyArea.style.position = 'absolute'
+    copyArea.style.left = '0'
+    copyArea.style.top = `${window.scrollY || document.documentElement.scrollTop}px`
+    copyArea.value = text
+    copyArea.focus()
+    copyArea.select()
+    document.execCommand('copy')
+  }
+}
+
+export const getPlayableProp = <SK extends keyof Song, EK extends keyof Episode>(
+  playable: Playable,
+  songKey: SK,
+  episodeKey: EK,
+): Song[SK] | Episode[EK] => {
+  return isSong(playable) ? playable[songKey] : playable[episodeKey]
+}
+
+export const defineAsyncComponent = (
+  loader: AsyncComponentLoader,
+  loadingComponent?: Component,
+  errorComponent?: Component,
+) => {
+  return baseDefineAsyncComponent({
+    loader,
+    loadingComponent: loadingComponent || LoadingComponent,
+    errorComponent: errorComponent || ErrorComponent,
+  })
+}
+
+export const flattenParams = <T extends object>(params: T): Record<string, string> => {
+  const result: Record<string, string> = {}
+
+  for (const [key, value] of Object.entries(params)) {
+    if (Array.isArray(value)) {
+      value.forEach((v, i) => (result[`${key}[${i}]`] = String(v)))
+    } else if (value !== undefined && value !== null) {
+      result[key] = String(value)
+    }
+  }
+
+  return result
+}

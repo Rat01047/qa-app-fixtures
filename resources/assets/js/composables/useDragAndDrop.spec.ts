@@ -1,0 +1,138 @@
+import { describe, expect, it, vi } from 'vite-plus/test'
+import { createHarness } from '@/__tests__/TestHarness'
+import { playableStore } from '@/stores/playableStore'
+import { playlistFolderStore } from '@/stores/playlistFolderStore'
+import { playlistStore } from '@/stores/playlistStore'
+import { useDraggable, useDroppable } from './useDragAndDrop'
+
+describe('useDragAndDrop', () => {
+  const h = createHarness({
+    afterEach: () => {
+      playlistFolderStore.state.folders = []
+      playlistStore.state.playlists = []
+    },
+  })
+
+  const createDragEvent = (types: string[] = [], data: Record<string, string> = {}): DragEvent => {
+    return {
+      dataTransfer: {
+        effectAllowed: '',
+        types,
+        setData: vi.fn(),
+        getData: vi.fn((key: string) => data[key] || ''),
+        setDragImage: vi.fn(),
+      },
+    } as unknown as DragEvent
+  }
+
+  describe('useDraggable', () => {
+    it('sets drag data for a single playable', () => {
+      const { startDragging } = useDraggable('playables')
+      const song = h.factory('song').make()
+      const event = createDragEvent()
+
+      startDragging(event, song)
+
+      expect(event.dataTransfer!.setData).toHaveBeenCalledWith(
+        'application/x-koel.playables',
+        JSON.stringify([song.id]),
+      )
+    })
+
+    it('sets drag data for an album', () => {
+      const { startDragging } = useDraggable('album')
+      const album = h.factory('album').make()
+      const event = createDragEvent()
+
+      startDragging(event, album)
+
+      expect(event.dataTransfer!.setData).toHaveBeenCalledWith('application/x-koel.album', JSON.stringify(album.id))
+    })
+
+    it('sets drag data for an artist', () => {
+      const { startDragging } = useDraggable('artist')
+      const artist = h.factory('artist').make()
+      const event = createDragEvent()
+
+      startDragging(event, artist)
+
+      expect(event.dataTransfer!.setData).toHaveBeenCalledWith('application/x-koel.artist', JSON.stringify(artist.id))
+    })
+
+    it('sets drag data for a playlist', () => {
+      const { startDragging } = useDraggable('playlist')
+      const playlist = h.factory('playlist').make()
+      const event = createDragEvent()
+
+      startDragging(event, playlist)
+
+      expect(event.dataTransfer!.setData).toHaveBeenCalledWith(
+        'application/x-koel.playlist',
+        JSON.stringify(playlist.id),
+      )
+    })
+
+    it('does nothing without dataTransfer', () => {
+      const { startDragging } = useDraggable('playables')
+      const event = { dataTransfer: null } as unknown as DragEvent
+      expect(() => startDragging(event, h.factory('song').make())).not.toThrow()
+    })
+
+    it('creates a ghost drag image', () => {
+      const { startDragging } = useDraggable('playables')
+      const song = h.factory('song').make()
+      const event = createDragEvent()
+
+      startDragging(event, song)
+
+      expect(event.dataTransfer!.setDragImage).toHaveBeenCalled()
+    })
+  })
+
+  describe('useDroppable', () => {
+    it('accepts drops of configured types', () => {
+      const { acceptsDrop } = useDroppable(['playables', 'album'])
+      const event = createDragEvent(['application/x-koel.playables'])
+      expect(acceptsDrop(event)).toBe(true)
+    })
+
+    it('rejects drops of unconfigured types', () => {
+      const { acceptsDrop } = useDroppable(['playables'])
+      const event = createDragEvent(['application/x-koel.album'])
+      expect(acceptsDrop(event)).toBe(false)
+    })
+
+    it('parses dropped data', () => {
+      const { getDroppedData } = useDroppable(['playables'])
+      const event = createDragEvent(['application/x-koel.playables'], {
+        'application/x-koel.playables': JSON.stringify(['id-1', 'id-2']),
+      })
+
+      expect(getDroppedData(event)).toEqual(['id-1', 'id-2'])
+    })
+
+    it('returns null for unknown drag type', () => {
+      const { getDroppedData } = useDroppable(['playables'])
+      const event = createDragEvent([])
+      expect(getDroppedData(event)).toBeNull()
+    })
+
+    it('resolves every playlist in a dropped folder tree', async () => {
+      const root = h.factory('playlist-folder').make({ parent_id: null })
+      const child = h.factory('playlist-folder').make({ parent_id: root.id })
+      const directPlaylist = h.factory('playlist').make({ folder_id: root.id })
+      const childPlaylist = h.factory('playlist').make({ folder_id: child.id })
+      const songs = h.factory('song').make(3)
+      playlistFolderStore.init([root, child])
+      playlistStore.state.playlists = [directPlaylist, childPlaylist]
+      const fetchMock = h.mock(playableStore, 'fetchForPlaylists').mockResolvedValue(songs)
+      const { resolveDroppedItems } = useDroppable(['playlist-folder'])
+      const event = createDragEvent(['application/x-koel.playlist-folder'], {
+        'application/x-koel.playlist-folder': JSON.stringify(root.id),
+      })
+
+      expect(await resolveDroppedItems(event)).toEqual(songs)
+      expect(fetchMock).toHaveBeenCalledWith([directPlaylist, childPlaylist])
+    })
+  })
+})

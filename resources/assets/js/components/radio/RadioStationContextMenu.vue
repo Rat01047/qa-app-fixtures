@@ -1,0 +1,62 @@
+<template>
+  <ul>
+    <MenuItem @click="togglePlayback">
+      {{ station.playback_state === 'Playing' ? 'Stop' : 'Play' }}
+    </MenuItem>
+    <Separator />
+    <MenuItem @click="toggleFavorite">{{ station.favorite ? 'Undo Favorite' : 'Favorite' }}</MenuItem>
+    <Separator />
+    <MenuItem v-if="allowEdit" @click="requestEditForm">Edit…</MenuItem>
+    <MenuItem v-if="allowDelete" @click="maybeDelete">Delete</MenuItem>
+  </ul>
+</template>
+
+<script lang="ts" setup>
+import { computed, toRefs } from 'vue'
+import { defineAsyncComponent } from '@/utils/helpers'
+import { useContextMenu } from '@/composables/useContextMenu'
+import { useModal } from '@/composables/useModal'
+import { radioStationStore } from '@/stores/radioStationStore'
+import { playback } from '@/services/playbackManager'
+import { usePolicies } from '@/composables/usePolicies'
+import { useDialogBox } from '@/composables/useDialogBox'
+import { useMessageToaster } from '@/composables/useMessageToaster'
+
+const props = defineProps<{ station: RadioStation }>()
+const { station } = toRefs(props)
+
+const EditRadioStationForm = defineAsyncComponent(() => import('@/components/radio/EditRadioStationForm.vue'))
+
+const { MenuItem, Separator, trigger } = useContextMenu()
+const { openModal } = useModal()
+const { toastSuccess } = useMessageToaster()
+const { showConfirmDialog } = useDialogBox()
+const { currentUserCan } = usePolicies()
+
+const allowEdit = computed(() => currentUserCan.editRadioStation(station.value))
+const allowDelete = computed(() => currentUserCan.deleteRadioStation(station.value))
+
+const togglePlayback = () =>
+  trigger(async () => {
+    const playbackService = playback('radio')
+
+    if (station.value.playback_state === 'Playing') {
+      await playbackService.stop()
+    } else {
+      await playbackService.play(station.value)
+    }
+  })
+
+const toggleFavorite = () => trigger(() => radioStationStore.toggleFavorite(station.value))
+
+const requestEditForm = () =>
+  trigger(() => openModal<'EDIT_RADIO_STATION_FORM'>(EditRadioStationForm, { station: station.value }))
+
+const maybeDelete = () =>
+  trigger(async () => {
+    if (await showConfirmDialog('Delete the radio station? This action is NOT reversible!')) {
+      await radioStationStore.delete(station.value)
+      toastSuccess(`Radio station deleted.`)
+    }
+  })
+</script>

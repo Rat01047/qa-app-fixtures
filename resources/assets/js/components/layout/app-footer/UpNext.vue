@@ -1,0 +1,28 @@
+<template>
+  <article v-if="playable" class="fixed z-99 right-[5vw] top-18 flex bg-k-bg border border-px border-k-fg-10">
+    <span :style="{ backgroundImage: `url(${defaultCover})` }">
+      <img :src alt="Cover image" class="w-[96px] aspect-square object-cover" loading="lazy" />
+    </span>
+    <main class="px-5 py-4 min-w-80 max-w-96 flex flex-col justify-between overflow-hidden">
+      <h4 class="uppercase">Up Next</h4>
+      <p class="text-k-fg text-xl overflow-hidden whitespace-nowrap text-ellipsis">
+        {{ playable.title }}
+      </p>
+      <p class="overflow-hidden whitespace-nowrap text-ellipsis">{{ author }}</p>
+    </main>
+  </article>
+</template>
+
+<script setup lang="ts">
+import { computed, toRefs } from 'vue'
+import { getPlayableProp } from '@/utils/helpers'
+import { useBranding } from '@/composables/useBranding'
+
+const props = defineProps<{ playable: Playable }>()
+const { playable } = toRefs(props)
+
+const { cover: defaultCover } = useBranding()
+
+const src = computed(() => getPlayableProp(playable.value, 'album_cover', 'episode_image'))
+const author = computed(() => getPlayableProp(playable.value, 'artist_name', 'podcast_author'))
+</script>

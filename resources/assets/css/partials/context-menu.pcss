@@ -1,0 +1,29 @@
+.context-menu {
+  @apply py-1 px-0 w-max min-w-[144px] bg-k-bg-context-menu fixed border border-k-fg-10 rounded-md z-1001 shadow-md;
+
+  .arrow {
+    @apply bg-k-bg-context-menu absolute w-[8px] aspect-square rotate-45;
+  }
+
+  li {
+    @apply relative px-4 py-1.5 text-k-fg leading-7 cursor-default;
+    @apply whitespace-nowrap;
+
+    &.with-icon,
+    &.has-sub {
+      @apply flex items-center gap-2 w-full;
+    }
+
+    &.separator {
+      @apply pointer-events-none p-0 border-b border-b-k-fg-10;
+    }
+  }
+
+  .submenu {
+    @apply absolute top-0 left-full hidden;
+
+    &[data-open] {
+      @apply block;
+    }
+  }
+}

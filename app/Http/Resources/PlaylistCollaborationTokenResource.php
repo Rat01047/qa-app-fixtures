@@ -1,0 +1,31 @@
+<?php
+
+namespace App\Http\Resources;
+
+use App\Models\PlaylistCollaborationToken;
+use Illuminate\Http\Resources\Json\JsonResource;
+use SensitiveParameter;
+
+class PlaylistCollaborationTokenResource extends JsonResource
+{
+    public const array JSON_STRUCTURE = [
+        'type',
+        'token',
+    ];
+
+    public function __construct(
+        #[SensitiveParameter]
+        private readonly PlaylistCollaborationToken $token,
+    ) {
+        parent::__construct($token);
+    }
+
+    /** @inheritdoc */
+    public function toArray($request): array
+    {
+        return [
+            'type' => 'playlist_collaboration_tokens',
+            'token' => $this->token->token,
+        ];
+    }
+}

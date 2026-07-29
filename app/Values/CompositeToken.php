@@ -1,0 +1,42 @@
+<?php
+
+namespace App\Values;
+
+use Illuminate\Contracts\Support\Arrayable;
+use Laravel\Sanctum\NewAccessToken;
+use SensitiveParameter;
+
+/**
+ * A "composite token" consists of two tokens:
+ *
+ * - an API token, which has all abilities
+ * - an audio token, which has only the "audio" ability i.e. to play and download audio files. This token is used for
+ * the audio player on the frontend as part of the GET query string, and thus has limited privileges.
+ *
+ * This approach helps prevent the API token from being logged by servers and proxies.
+ */
+final readonly class CompositeToken implements Arrayable
+{
+    private function __construct(
+        #[SensitiveParameter]
+        public string $apiToken,
+        #[SensitiveParameter]
+        public string $audioToken,
+    ) {}
+
+    public static function fromAccessTokens(NewAccessToken $api, NewAccessToken $audio): self
+    {
+        return new self($api->plainTextToken, $audio->plainTextToken);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function toArray(): array
+    {
+        return [
+            'token' => $this->apiToken,
+            'audio-token' => $this->audioToken,
+        ];
+    }
+}

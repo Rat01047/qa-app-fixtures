@@ -1,0 +1,57 @@
+<?php
+
+namespace App\Http\Requests\API\Radio;
+
+use App\Http\Requests\API\Request;
+use App\Rules\HasAudioContentType;
+use App\Rules\SafeUrl;
+use App\Rules\ValidImageData;
+use App\Values\Radio\RadioStationUpdateData;
+use Illuminate\Validation\Rule;
+
+/**
+ * @property-read string $url
+ * @property-read string $name
+ * @property-read ?string $logo
+ * @property-read ?string $description
+ * @property-read ?bool $is_public
+ * @property-read ?string $homepage_url
+ */
+class RadioStationUpdateRequest extends Request
+{
+    /** @inheritdoc */
+    public function rules(): array
+    {
+        return [
+            'url' => [
+                'bail',
+                'required',
+                'url',
+                Rule::unique('radio_stations')
+                    ->where(function ($query) {
+                        return $query->where('user_id', $this->user()->id);
+                    })
+                    ->ignore($this->route('station')->id), // @phpstan-ignore-line
+                new SafeUrl(),
+                new HasAudioContentType(),
+            ],
+            'name' => ['required', 'string', 'max:191'],
+            'logo' => ['nullable', 'sometimes', new ValidImageData()],
+            'description' => ['string', 'sometimes', 'nullable'],
+            'is_public' => ['boolean'],
+            'homepage_url' => ['sometimes', 'nullable', 'url'],
+        ];
+    }
+
+    public function toDto(): RadioStationUpdateData
+    {
+        return RadioStationUpdateData::make(
+            name: $this->name,
+            url: $this->url,
+            description: $this->string('description'),
+            logo: $this->has('logo') ? $this->string('logo') : null,
+            isPublic: $this->boolean('is_public'),
+            homepageUrl: $this->homepage_url,
+        );
+    }
+}

@@ -1,0 +1,80 @@
+<?php
+
+namespace App\Console\Commands\Storage;
+
+use App\Facades\License;
+use App\Services\DotenvEditor;
+use App\Services\SongStorages\S3CompatibleStorage;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Artisan;
+use Throwable;
+
+use function Laravel\Prompts\password;
+use function Laravel\Prompts\text;
+
+class SetupS3StorageCommand extends Command
+{
+    protected $signature = 'koel:storage:s3';
+    protected $description = 'Set up Amazon S3 or a compatible service as the storage driver for Koel';
+
+    public function __construct(
+        private readonly DotenvEditor $dotenvEditor,
+    ) {
+        parent::__construct();
+    }
+
+    public function handle(): int
+    {
+        if (!License::isPlus()) {
+            $this->components->error('S3 as a storage driver is only available in Koel Plus.');
+
+            return self::FAILURE;
+        }
+
+        $this->components->info('Setting up S3 or an S3-compatible service as the storage driver for Koel.');
+        $this->components->warn('Changing the storage configuration can cause irreversible data loss.');
+        $this->components->warn('Consider backing up your data before proceeding.');
+
+        $config = ['STORAGE_DRIVER' => 's3'];
+        $config['AWS_ACCESS_KEY_ID'] = text(label: 'Enter the access key ID', hint: 'AWS_ACCESS_KEY_ID');
+
+        $existingSecret = (string) env('AWS_SECRET_ACCESS_KEY');
+
+        $enteredSecret = password(
+            label: 'Enter the secret access key',
+            hint: $existingSecret === ''
+                ? 'AWS_SECRET_ACCESS_KEY'
+                : 'AWS_SECRET_ACCESS_KEY. Leave blank to keep the current secret.',
+        );
+
+        $config['AWS_SECRET_ACCESS_KEY'] = $enteredSecret !== '' ? $enteredSecret : $existingSecret;
+
+        $config['AWS_REGION'] = text(label: 'Enter the region', hint: 'AWS_REGION. For Cloudflare R2, use "auto".');
+        $config['AWS_ENDPOINT'] = text(label: 'Enter the endpoint', hint: 'AWS_ENDPOINT');
+        $config['AWS_BUCKET'] = text(label: 'Enter the bucket name', hint: 'AWS_BUCKET');
+
+        $this->dotenvEditor->backup()->setKeys($config);
+
+        $this->comment('Uploading a test file to make sure everything is working...');
+
+        config('filesystems.disks.s3.bucket', $config['AWS_BUCKET']);
+
+        try {
+            /** @var S3CompatibleStorage $storage */
+            $storage = app()->build(S3CompatibleStorage::class);
+            $storage->testSetup();
+        } catch (Throwable $e) {
+            $this->error('Failed to upload test file: ' . $e->getMessage() . '.');
+            $this->comment('Please check your configuration and try again.');
+
+            $this->dotenvEditor->restore();
+            Artisan::call('config:clear', ['--quiet' => true]);
+
+            return self::FAILURE;
+        }
+
+        $this->components->info('All done!');
+
+        return self::SUCCESS;
+    }
+}

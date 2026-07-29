@@ -1,0 +1,55 @@
+<?php
+
+namespace App\Http\Resources;
+
+use App\Models\RadioStation;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class RadioStationResource extends JsonResource
+{
+    public const array JSON_STRUCTURE = [
+        'type',
+        'name',
+        'id',
+        'url',
+        'homepage_url',
+        'logo',
+        'description',
+        'is_public',
+        'created_at',
+        'permissions' => [
+            'edit',
+            'delete',
+        ],
+    ];
+
+    public function __construct(
+        private readonly RadioStation $station,
+    ) {
+        parent::__construct($station);
+    }
+
+    /** @inheritdoc */
+    public function toArray(Request $request): array
+    {
+        $user = $request->user();
+
+        return [
+            'type' => 'radio-stations',
+            'name' => $this->station->name,
+            'id' => $this->station->id,
+            'url' => $this->station->url,
+            'homepage_url' => $this->station->homepage_url,
+            'logo' => image_storage_url($this->station->logo),
+            'description' => $this->station->description,
+            'is_public' => $this->station->is_public,
+            'created_at' => $this->station->created_at,
+            'favorite' => $this->station->favorite,
+            'permissions' => [
+                'edit' => $user->can('edit', $this->station),
+                'delete' => $user->can('delete', $this->station),
+            ],
+        ];
+    }
+}
