@@ -21,7 +21,7 @@ beyond PHP, Composer and Node.
 | `laravel-noenv` | Laravel 12 | Same as `laravel` but ships **no** `.env.example` |
 | `laravel-9` | Laravel 9 | **End-of-life** framework line — old app skeleton, old Vite, `composer update` refuses to resolve it |
 | `php` | PHP | Plain PHP, no framework; exercises a Node build step on a non-Laravel site |
-| `symfony` | Symfony 7.4 | Webpack Encore build; committed `.env` |
+| `symfony` | Symfony 7.4 | Webpack Encore build; committed `.env`; application log whose **file name is derived from `APP_ENV`** |
 | `bedrock` | Bedrock | A real Roots Bedrock site — separated web root, Composer-managed WordPress, config from `.env` |
 | `main` | Bedrock | Mirror of `bedrock` plus this index |
 
@@ -62,6 +62,9 @@ falsifiable, and each branch README says so in place:
 | --- | --- | --- |
 | No `.env`, no `.env.example` | `php` | Environment editor with nothing to read |
 | Committed `.env` | `symfony` | The control case for the above |
+| Log file named from `%kernel.environment%` | `symfony` | A log viewer must resolve the name at runtime. Hardcoding `prod.log` looks right on the default deployment and gives an empty pane under `APP_ENV=dev` |
+| A prod file handler added on top of upstream's stderr one | `symfony` | Stock Symfony prod logs to `php://stderr` and writes **no file** — an empty `var/log/prod.log` on a customer app is correct, not broken. Without the added handler there would be nothing for a viewer to show at all |
+| Log lines stamped `env=<environment>` | `symfony` | Separates "opened the right file" from "opened a file". With generic text, a wrong resolution reads as a pass |
 | No `package.json` at all | `bedrock` | Builder must skip the Node step, not fail the deploy |
 | `package.json` with no dependencies | `php` | Node build runs for a non-Laravel site |
 | No Horizon / Octane / Inertia | `laravel-minimal` | Feature detection gates the UI correctly |
@@ -85,6 +88,30 @@ curl -s https://<site>/health | python3 -m json.tool | grep -A5 '"detect"'
 
 A tool that offers Horizon, Octane or SSR controls on `laravel-minimal` is
 over-detecting, and this is what proves it without SSH.
+
+## Application logs
+
+`laravel` writes `storage/logs/laravel.log` — one fixed name. `symfony` does
+not: `config/packages/monolog.yaml` writes to
+`%kernel.logs_dir%/%kernel.environment%.log`, so the file is `prod.log` under
+`APP_ENV=prod` and `dev.log` under `APP_ENV=dev`. That name has to be resolved
+on the server, after the app boots.
+
+`symfony` ships `/log-test`, which writes one line at every level on demand, and
+a `logs` block on `/health`:
+
+```bash
+curl -s https://<site>/log-test          # make the log change
+curl -s https://<site>/health | jq .logs # what should be there vs what is
+# logs.app_env / logs.expected_file / logs.expected_file_present
+# logs.files_present / logs.files[<name>].last_line
+```
+
+Compare `logs.expected_file` against whichever file the viewer opened. Every
+line is stamped `env=<environment>`, so a viewer reading the wrong file is
+caught by content rather than by trusting a name. Flip `APP_ENV` to `dev`
+(`.env.local`, or a real environment variable), redeploy, and repeat: the viewer
+must follow to `dev.log`. Full procedure in that branch's README.
 
 ## One branch is meant to go red
 
@@ -144,7 +171,7 @@ branch:
 | `laravel-minimal` | ✓ | `npm ci` + `npm run build` ✓ | 200 `Deploy OK — Laravel` | `ok:true`, all four `detect` false |
 | `laravel-noenv` | ✓ | — | 500 by design | see above |
 | `php` | ✓ | `npm run build` ✓ | 200 `Deploy OK — PHP` | `ok:true`, `build.ran:true` |
-| `symfony` | ✓ | `encore production` ✓ | 200 `Deploy OK — Symfony` | `ok:true`, entrypoints + manifest present |
+| `symfony` | ✓ | `encore production` ✓ | 200 `Deploy OK — Symfony` | `ok:true`, entrypoints + manifest present; `APP_ENV=prod` writes `var/log/prod.log` only and `APP_ENV=dev` writes `var/log/dev.log` only, each line stamped with its own environment |
 | `bedrock` | ✓ | — | 200 real WordPress 6.9.5 | `/qa` 200 listing 3 plugins + 2 themes, `/qa-health` `ok:true`, `database.connected:true`, `content` matches `composer.locked` |
 | `laravel-9` | ✓ `install` (4 advisories reported) | `vite build` ✓ (Vite 4.5.14) | 200 `Deploy OK — Laravel`, `9.52.21` | `ok:true`, `detect` all false, `legacy.major:9`, both kernel files true |
 
