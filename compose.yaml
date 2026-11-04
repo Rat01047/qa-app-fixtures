@@ -1,0 +1,6 @@
+services:
+  web:
+    image: hashicorp/http-echo:1.0
+    command: ["-listen=:5678", "-text=qa-pr2755 pub v1"]
+    ports:
+      - "5678:5678"
