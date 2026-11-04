@@ -1,7 +1,7 @@
 services:
   web:
     image: hashicorp/http-echo:1.0
-    command: ["-listen=:5678", "-text=qa-pr2755 pub v3"]
+    command: ["-listen=:5678", "-text=qa-pr2755 pub v4"]
     ports:
       - "5678:5678"
     mem_limit: 64m
