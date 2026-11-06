@@ -1,7 +1,9 @@
 services:
   web:
     image: hashicorp/http-echo:1.0
-    command: ["-listen=:5678", "-text=qa-r47 approval v1"]
+    command: ["-listen=:5678", "-text=qa-r47 approval v2 netadmin"]
     ports:
       - "5678:5678"
+    cap_add:
+      - NET_ADMIN
     mem_limit: 32m
